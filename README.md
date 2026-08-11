@@ -623,7 +623,7 @@ This project uses GitHub Actions for:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yml` | Push/PR | Lint, type check, and tests across a Python matrix |
-| `copr-build.yml` | Release | Auto-build in COPR (SCM build from the GitHub tag) |
+| `copr-build.yml` | Tag push / Release / Manual | Auto-build in COPR (SCM build from the GitHub tag) |
 | `release.yml` | Tag push | Create GitHub release |
 | `docs.yml` | Push to `master` | Build & deploy docs to GitHub Pages |
 

@@ -1,11 +1,23 @@
 # GitHub Actions Workflow for Automatic COPR Builds
-# Triggers when a new release is published on GitHub
+# Builds from a git tag and submits the package to COPR via copr-cli.
 
 name: Build and Publish to COPR
 
 on:
+  push:
+    tags:
+      - 'v*'
   release:
     types: [published]
+  workflow_dispatch:
+
+# NOTE: the primary trigger is the tag push. Releases created by release.yml
+# use the repository's GITHUB_TOKEN, and GitHub deliberately does not create
+# workflow runs from events produced by GITHUB_TOKEN (anti-recursion rule), so
+# a workflow-created release never fires `on: release` - the run list for this
+# workflow was empty despite a published v1.1.1 release. The `release` trigger
+# is kept for releases published manually from the web UI, and
+# `workflow_dispatch` allows manual rebuilds.
 
 env:
   COPR_OWNER: snap-star
