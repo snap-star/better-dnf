@@ -33,7 +33,7 @@ COPR (Cool Other Package Repo) is Fedora's official third-party repository syste
 sudo dnf install copr-cli
 
 # Login to COPR (will prompt for credentials)
-copr-cli login snap-star
+copr-cli new-api-token  # opens your browser; token is saved to ~/.config/copr
 ```
 
 ### Step 3: Create COPR Project
