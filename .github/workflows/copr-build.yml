@@ -64,9 +64,11 @@ jobs:
           # Build from the GitHub release tag (SCM build).
           # No PyPI upload is needed - COPR clones the tagged source
           # and auto-detects better-dnf.spec at the repo root.
-          copr-cli build ${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }} \
-            scm --clone-url https://github.com/${{ env.COPR_OWNER }}/better-dnf \
-            --committish v${{ steps.version.outputs.version }}
+          # copr-cli 2.5 uses the `buildscm` subcommand (the old
+          # `build <project> scm` form was removed).
+          copr-cli buildscm ${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }} \
+            --clone-url https://github.com/${{ env.COPR_OWNER }}/better-dnf \
+            --commit v${{ steps.version.outputs.version }}
           
           echo ""
           echo "✅ Build triggered successfully!"
