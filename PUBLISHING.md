@@ -101,7 +101,7 @@ This repository ships ready-made GitHub Actions workflows — no webhook setup n
 To use them:
 
 1. Push a version tag: `git tag v1.0.0 && git push origin v1.0.0`
-2. Add the `COPR_CONFIG` secret to GitHub (see `.github/SECRETS.md`)
+2. Add the `COPR_CONFIG` secret to GitHub (Settings → Secrets and variables → Actions, with the contents of your `~/.config/copr` file)
 3. The release and COPR build happen automatically
 
 ---

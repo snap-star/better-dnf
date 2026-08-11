@@ -8,7 +8,7 @@ This tool helps Fedora users safely manage system updates by:
 - Creating btrfs snapshots before updates for easy rollback
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.1"
 __author__ = "snap-star"
 
 from better_dnf.analyzer import UpdateAnalyzer

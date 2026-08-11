@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-08-11
+
 ### ✨ Added
 
 - **GitHub Pages documentation site** - New `docs/` MkDocs site (index, user guide, command reference) built with `mkdocs build --strict` and deployed to GitHub Pages by the `docs.yml` workflow on every push to `main`.

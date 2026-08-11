@@ -246,7 +246,7 @@ better-dnf version
 Example output:
 
 ```
-Better DNF v1.0.0
+Better DNF v1.1.1
 ```
 
 ---

@@ -1,5 +1,5 @@
 Name:           better-dnf
-Version:        1.0.0
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -53,6 +53,13 @@ Requires:       python3-packaging
 %{python3_sitelib}/%{name}-%{version}-py?.?.egg-info/
 
 %changelog
+* Tue Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.1-1
+- Bump version to 1.1.1
+- GitHub Pages documentation site + deployment workflow
+- Sudo/tty fixes: keep controlling terminal (tty_tickets), no double-executed probes
+- Snapshot post pairing with --pre-number + verification + standalone fallback
+- Remove unused --all flag and unused requests/pyyaml dependencies
+
 * Mon Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.0.0-1
 - First stable release
 - Smart categorization of updates

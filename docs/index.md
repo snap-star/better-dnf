@@ -79,10 +79,10 @@ For the full interactive workflow, strategies, and snapshot management, read the
 |------|----------|
 | [User Guide](user-guide.md) | The `analyze` workflow, update strategies, custom selection, snapshots, rollback, safety, troubleshooting |
 | [Command Reference](command-reference.md) | Every command with all options and examples |
-| [README](https://github.com/snap-star/better-dnf/blob/main/README.md) | Project overview, badges, and landing content |
-| [CHANGELOG](https://github.com/snap-star/better-dnf/blob/main/CHANGELOG.md) | Version history |
-| [CONTRIBUTING](https://github.com/snap-star/better-dnf/blob/main/CONTRIBUTING.md) | How to contribute |
-| [PUBLISHING](https://github.com/snap-star/better-dnf/blob/main/PUBLISHING.md) | How to publish to Fedora / COPR |
+| [README](https://github.com/snap-star/better-dnf/blob/master/README.md) | Project overview, badges, and landing content |
+| [CHANGELOG](https://github.com/snap-star/better-dnf/blob/master/CHANGELOG.md) | Version history |
+| [CONTRIBUTING](https://github.com/snap-star/better-dnf/blob/master/CONTRIBUTING.md) | How to contribute |
+| [PUBLISHING](https://github.com/snap-star/better-dnf/blob/master/PUBLISHING.md) | How to publish to Fedora / COPR |
 
 ---
 
