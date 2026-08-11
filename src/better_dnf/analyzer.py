@@ -5,7 +5,7 @@ AI-powered analyzer for determining update importance.
 from __future__ import annotations
 
 import re
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from .models import (
     PackageUpdate,
@@ -355,7 +355,7 @@ class UpdateAnalyzer:
             categories[package.category].append(package)
         return categories
 
-    def get_risk_assessment(self) -> dict[str, any]:
+    def get_risk_assessment(self) -> dict[str, Any]:
         """
         Assess the risk of applying all updates at once.
 

@@ -176,6 +176,7 @@ Example: better-dnf analyze -s security""",
 
         # Select update strategy with loop for back navigation
         selected_packages = None
+        selected_strategy: str | None = None
 
         # If strategy is provided via CLI flag, don't loop back to interactive menu
         if strategy:

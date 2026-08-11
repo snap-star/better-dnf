@@ -264,7 +264,7 @@ class SnapshotManager:
         pres = [s for s in snapshots if s.get("type") == "pre"]
         if not pres:
             return None
-        return max(pres, key=lambda s: int(s["id"]))["id"]
+        return str(max(pres, key=lambda s: int(s["id"]))["id"])
 
     @classmethod
     def _create_snapper_snapshot(

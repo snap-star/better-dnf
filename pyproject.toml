@@ -40,7 +40,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "black>=22.0.0",
     "ruff>=0.1.0",
-    "mypy>=1.0.0",
+    "mypy>=1.0.0,<2.0",  # <2.0: mypy 2.x dropped Python 3.9 support (CI matrix runs 3.9)
 ]
 
 [project.scripts]
@@ -63,7 +63,7 @@ line-length = 88
 target-version = "py39"
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 

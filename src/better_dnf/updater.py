@@ -141,6 +141,7 @@ class UpdateApplier:
 
             # Feed the sudo password through stdin when needed
             if sudo_password:
+                assert process.stdin is not None
                 try:
                     process.stdin.write(sudo_password + "\n")
                     process.stdin.flush()
@@ -149,6 +150,7 @@ class UpdateApplier:
                     pass
 
             # Read output in real-time
+            assert process.stdout is not None
             for line in iter(process.stdout.readline, ""):
                 if line:
                     line = line.rstrip()

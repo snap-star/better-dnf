@@ -261,7 +261,7 @@ class DNFParser:
         Returns:
             Dictionary with package information
         """
-        info = {}
+        info: dict[str, Any] = {}
 
         # Get basic info
         output, return_code = cls.run_command(

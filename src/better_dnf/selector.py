@@ -347,7 +347,7 @@ class UpdateSelector:
         if "back" in selected:
             return None  # Signal to go back to category selection
 
-        return selected
+        return [p for p in selected if isinstance(p, PackageUpdate)]
 
     @classmethod
     def create_update_plan(
@@ -403,7 +403,7 @@ class UpdateSelector:
         )
 
         # Count by category
-        categories = {}
+        categories: dict[UpdateCategory, int] = {}
         for pkg in plan.packages:
             categories[pkg.category] = categories.get(pkg.category, 0) + 1
 
@@ -512,13 +512,14 @@ class UpdateSelector:
         cls.display_package_preview(plan.packages)
 
         # Final confirmation
-        return confirm(
+        result = confirm(
             f"\nReady to update {plan.total_packages} packages?",
             default=False,
         ).ask()
+        return bool(result)
 
     @classmethod
-    def select_update_strategy(cls) -> str:
+    def select_update_strategy(cls) -> str | None:
         """
         Let user choose an update strategy.
 
@@ -563,7 +564,12 @@ class UpdateSelector:
             ),
         ]
 
-        return select(
+        # NOTE: annotated local (not a cast) so the str | None union is never
+        # evaluated at runtime - PEP 604 unions raise TypeError on Python 3.9,
+        # and this package supports 3.9 at runtime (from __future__ import
+        # annotations only defers annotations, not cast() arguments).
+        result: str | None = select(
             "How would you like to select updates?",
             choices=choices,
         ).ask()
+        return result
