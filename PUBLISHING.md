@@ -55,7 +55,7 @@ The bundled GitHub Actions workflow (`copr-build.yml`) runs this automatically o
 
 ```bash
 # Build from the GitHub release tag (no PyPI upload needed)
-copr-cli build snap-star/better-dnf scm --clone-url https://github.com/snap-star/better-dnf --committish v1.0.0
+copr-cli build snap-star/better-dnf scm --clone-url https://github.com/snap-star/better-dnf --committish v1.1.1
 
 # Alternative: build directly from PyPI (requires publishing to PyPI first)
 # copr-cli build snap-star/better-dnf pypi:better-dnf
