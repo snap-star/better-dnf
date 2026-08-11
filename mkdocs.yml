@@ -1,0 +1,43 @@
+# MkDocs site configuration for Better DNF documentation
+# Serve locally with: mkdocs serve   (or: make docs)
+# Build with:         mkdocs build
+
+site_name: Better DNF
+site_description: A smarter DNF update tool for Fedora — categorize, assess, and selectively install updates safely.
+site_url: https://github.com/snap-star/better-dnf
+repo_url: https://github.com/snap-star/better-dnf
+edit_uri: blob/main/docs/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+nav:
+  - Home: index.md
+  - User Guide: user-guide.md
+  - Command Reference: command-reference.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true

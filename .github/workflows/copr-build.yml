@@ -45,10 +45,12 @@ jobs:
         run: |
           echo "Triggering COPR build for better-dnf ${{ steps.version.outputs.version }}"
           
-          # Build from PyPI source
-          # COPR will automatically build the package
+          # Build from the GitHub release tag (SCM build).
+          # No PyPI upload is needed - COPR clones the tagged source
+          # and auto-detects better-dnf.spec at the repo root.
           copr-cli build ${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }} \
-            pypi:better-dnf==${{ steps.version.outputs.version }}
+            scm --clone-url https://github.com/${{ env.COPR_OWNER }}/better-dnf \
+            --committish v${{ steps.version.outputs.version }}
           
           echo ""
           echo "✅ Build triggered successfully!"

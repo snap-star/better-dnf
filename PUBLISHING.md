@@ -41,21 +41,24 @@ copr-cli login snap-star
 ```bash
 # Create project for multiple Fedora versions
 copr-cli create better-dnf \
-    --chroot fedora-41-x86_64 \
     --chroot fedora-42-x86_64 \
+    --chroot fedora-43-x86_64 \
+    --chroot fedora-44-x86_64 \
     --chroot fedora-rawhide-x86_64 \
     --description "A smarter DNF update tool for Fedora" \
     --instructions "https://github.com/snap-star/better-dnf"
 ```
 
-### Step 4: Build Package from PyPI (Easiest)
+### Step 4: Build Package (Recommended: from the GitHub tag)
+
+The bundled GitHub Actions workflow (`copr-build.yml`) runs this automatically on every release, so you normally don't need to do it by hand:
 
 ```bash
-# Method 1: Build directly from PyPI
-copr-cli build snap-star/better-dnf pypi:better-dnf
-
-# Method 2: Build from GitHub tag
+# Build from the GitHub release tag (no PyPI upload needed)
 copr-cli build snap-star/better-dnf scm --clone-url https://github.com/snap-star/better-dnf --committish v1.0.0
+
+# Alternative: build directly from PyPI (requires publishing to PyPI first)
+# copr-cli build snap-star/better-dnf pypi:better-dnf
 ```
 
 ### Step 5: Build from Local Spec File
@@ -88,14 +91,18 @@ sudo dnf install better-dnf
 sudo dnf update better-dnf
 ```
 
-### Step 7: Automate Builds (Optional)
+### Step 7: Automate Builds (Included)
 
-Set up automatic builds on GitHub releases:
+This repository ships ready-made GitHub Actions workflows — no webhook setup needed:
 
-1. Go to your COPR project settings
-2. Enable SCM integration
-3. Link your GitHub repository
-4. Configure webhook to trigger builds on tags
+- `release.yml` — Creates a GitHub release when you push a `v*` tag
+- `copr-build.yml` — Builds that release in COPR automatically (SCM build from the tag)
+
+To use them:
+
+1. Push a version tag: `git tag v1.0.0 && git push origin v1.0.0`
+2. Add the `COPR_CONFIG` secret to GitHub (see `.github/SECRETS.md`)
+3. The release and COPR build happen automatically
 
 ---
 
@@ -257,9 +264,9 @@ A smarter DNF update tool that categorizes updates...
 %install
 %py3_install
 
-%files
+%files -n python3-%{name}
 %license LICENSE
-%doc README.md
+%doc README.md CHANGELOG.md
 %{_bindir}/%{name}
 %{python3_sitelib}/%{name}/
 ```

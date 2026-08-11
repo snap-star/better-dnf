@@ -2,7 +2,9 @@
 Tests for the updater module (apply_updates flow).
 """
 
+import os
 import subprocess
+import sys
 from unittest.mock import Mock, patch
 
 import pytest
@@ -138,6 +140,40 @@ class TestApplyUpdatesSudoFlow:
         assert cmd == ["sudo", "dnf", "upgrade", "-y", "kernel"]
         assert popen.call_args.kwargs["stdin"] is None
         proc.stdin.assert_not_called()
+
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason="os.setpgrp is POSIX-only; preexec_fn is None on Windows",
+    )
+    def test_child_keeps_controlling_terminal(self):
+        """Popen uses process-group isolation (setpgrp), NOT a new session.
+
+        start_new_session=True (setsid) detaches the child from the
+        controlling terminal; Fedora sudo with tty_tickets keys its cached
+        credentials to that terminal, so a detached dnf child fails with
+        "a terminal is required to read the password" even right after
+        'sudo -n -v' succeeded.  Regression test for that bug.
+        """
+        plan = _make_plan()
+        proc = _make_process(returncode=0, lines=["Complete!"])
+
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc) as popen,
+            patch(
+                "better_dnf.updater.ensure_sudo_credentials",
+                return_value=(True, None),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
+
+        assert ok is True
+        kwargs = popen.call_args.kwargs
+        # Own process group (so Ctrl+C killpg still works) but same session
+        # and controlling terminal, so sudo's tty-keyed cache is visible.
+        assert kwargs.get("preexec_fn") is os.setpgrp
+        assert "start_new_session" not in kwargs or kwargs["start_new_session"] is None
 
     def test_password_fed_via_stdin(self):
         """Password needed -> 'sudo -S dnf upgrade' with password via stdin."""
@@ -350,6 +386,9 @@ class TestApplyUpdatesSnapshots:
         assert plan.snapshot_id == "42"
         snap.assert_called_once()
         post.assert_called_once()
+        # The post snapshot is paired with the pre snapshot (--pre-number)
+        assert post.call_args.kwargs["pre_number"] == "42"
+        assert "After updating" in post.call_args.kwargs["description"]
 
     def test_snapshot_failure_continues_without_post(self):
         """Snapshot failure -> continue without snapshot, no post-snapshot."""

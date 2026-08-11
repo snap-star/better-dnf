@@ -76,11 +76,16 @@ pytest -v
 
 # Run with full coverage report (terminal + HTML + XML)
 make test-cov
+
+# Run the full suite (all tests)
+make test
 ```
+
+> 💡 `make test` / `make test-cov` set `PYTHONPATH=src`, so they always exercise the source tree — results are never skewed by a stale pip-installed copy of `better-dnf`.
 
 ### Coverage Requirements
 
-The project uses `pytest-cov` with a **`fail_under = 70`** gate configured in `pyproject.toml` — the test command exits non-zero if total line coverage drops below 70%. When adding new code:
+The project uses `pytest-cov` with a **`fail_under = 80`** gate configured in `pyproject.toml` — the test command exits non-zero if total line coverage drops below 80%. When adding new code:
 
 1. Add tests for it (target **80%+** for the module you touch)
 2. Run `make test-cov` to see per-module percentages and which lines are uncovered
@@ -102,8 +107,8 @@ ruff check .
 # Type checking
 mypy src/
 
-# Run all checks
-pre-commit run --all-files
+# Run all checks (lint + typecheck + test)
+make check
 ```
 
 ## 📝 Code Style
@@ -209,12 +214,14 @@ pytest --cov=better_dnf --cov-report=html
 
 ### Building Documentation
 
+The documentation is an [MkDocs](https://www.mkdocs.org/) site in [`docs/`](docs/) (see `mkdocs.yml` for the nav): `index.md` (overview), `user-guide.md` (workflows, snapshots, troubleshooting) and `command-reference.md` (every command + option). Keep the command reference in sync with `src/better_dnf/cli.py` when adding or changing commands.
+
 ```bash
 # Install documentation dependencies
 pip install mkdocs mkdocs-material
 
 # Serve documentation locally
-mkdocs serve
+mkdocs serve          # or: make docs
 
 # Build documentation
 mkdocs build
@@ -228,13 +235,16 @@ mkdocs build
 2. **Btrfs not detected**: Check if your root filesystem is btrfs
 3. **Missing dependencies**: Run `pip install -e ".[dev]"`
 
-### Debug Mode
+### Useful Flags
 
 ```bash
-# Run with debug output
-better-dnf analyze --debug
+# Skip snapshot creation (faster, but no rollback safety)
+better-dnf analyze --no-snapshot
 
-# Check system information
+# Pick a strategy directly, skipping the interactive menu
+better-dnf analyze -s security
+
+# Check the installed version
 better-dnf version
 ```
 

@@ -537,6 +537,69 @@ class TestSnapshotCommand:
         assert result.exit_code == 0
         assert "Root filesystem is not btrfs" in cli_env["text"]()
 
+    def test_create_post_positional(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.create_post_snapshot",
+            return_value=(True, "43", "Snapshot created successfully: 43"),
+        ) as post:
+            result = runner.invoke(app, ["snapshot", "create", "post"])
+
+        assert result.exit_code == 0
+        assert "Snapshot created successfully: 43" in cli_env["text"]()
+        post.assert_called_once()
+
+    def test_create_post_via_type_flag(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.create_post_snapshot",
+            return_value=(True, "43", "Snapshot created successfully: 43"),
+        ) as post:
+            result = runner.invoke(app, ["snapshot", "create", "-t", "post"])
+
+        assert result.exit_code == 0
+        post.assert_called_once()
+
+    def test_create_post_with_pre_number_flag(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.create_post_snapshot",
+            return_value=(True, "43", "Snapshot created successfully: 43"),
+        ) as post:
+            result = runner.invoke(
+                app, ["snapshot", "create", "post", "--pre-number", "307"]
+            )
+
+        assert result.exit_code == 0
+        assert "Snapshot created successfully: 43" in cli_env["text"]()
+        assert post.call_args.kwargs["pre_number"] == "307"
+
+    def test_create_single_positional(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.create_snapshot",
+            return_value=(True, "44", "Snapshot created successfully: 44"),
+        ) as snap:
+            result = runner.invoke(app, ["snapshot", "create", "single"])
+
+        assert result.exit_code == 0
+        snap.assert_called_once()
+        assert snap.call_args.kwargs["snapshot_type"] == "single"
+
+    def test_create_with_description(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.create_snapshot",
+            return_value=(True, "45", "Snapshot created successfully: 45"),
+        ) as snap:
+            result = runner.invoke(
+                app, ["snapshot", "create", "-d", "before kernel update"]
+            )
+
+        assert result.exit_code == 0
+        assert snap.call_args.kwargs["description"] == "before kernel update"
+
+    def test_create_invalid_type(self, cli_env):
+        result = runner.invoke(app, ["snapshot", "create", "bogus"])
+
+        assert result.exit_code == 0
+        assert "Invalid snapshot type: bogus" in cli_env["text"]()
+
     def test_list(self, cli_env):
         with patch("better_dnf.cli.SnapshotManager.display_snapshots") as display:
             result = runner.invoke(app, ["snapshot", "list"])

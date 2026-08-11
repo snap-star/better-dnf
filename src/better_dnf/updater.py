@@ -49,6 +49,9 @@ class UpdateApplier:
         # here and keep the password to feed back via 'sudo -S' if needed.
         sudo_password: str | None = None
         if not dry_run:
+            # NOTE: probe_args is only retained for API compatibility; auth is
+            # checked with 'sudo -n -v' (runs nothing), so 'dnf upgrade' is
+            # never executed as a probe.
             auth_ok, sudo_password = ensure_sudo_credentials(
                 probe_args=["dnf", "upgrade"]
             )
@@ -111,7 +114,21 @@ class UpdateApplier:
             import signal
             import sys
 
-            # Run dnf update with real-time output
+            # Run dnf update with real-time output.  Use preexec_fn=os.setpgrp
+            # (own process group, same session) instead of start_new_session:
+            # the child must keep the controlling terminal because Fedora's
+            # sudo enables tty_tickets by default, keying its credential cache
+            # to the controlling terminal.  A setsid()'d child has no
+            # controlling terminal and fails with "a terminal is required to
+            # read the password" even when credentials were just cached by
+            # 'sudo -n -v' (which runs with the terminal attached).
+            # The preexec_fn lint (unsafe with threads) is suppressed on the
+            # Popen call below: os.setpgrp is an async-signal-safe syscall
+            # wrapper (no locks) and better-dnf is single-threaded, so the
+            # threading hazard does not apply; Popen's process_group= option
+            # would avoid the lint but needs Python >=3.11 while the package
+            # supports >=3.9.
+            preexec_fn = os.setpgrp if sys.platform != "win32" else None
             process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE if sudo_password else None,
@@ -119,7 +136,7 @@ class UpdateApplier:
                 stderr=subprocess.STDOUT,  # Merge stderr into stdout
                 text=True,
                 bufsize=1,
-                start_new_session=sys.platform != "win32",
+                preexec_fn=preexec_fn,  # noqa: PLW1509
             )
 
             # Feed the sudo password through stdin when needed
@@ -161,14 +178,17 @@ class UpdateApplier:
                     "\n[bold green]✓ Updates applied successfully![/bold green]"
                 )
 
-                # Create post-update snapshot if pre-snapshot was created
+                # Create post-update snapshot if pre-snapshot was created,
+                # pairing it with the pre snapshot so snapper has a complete
+                # pre/post pair (post snapshots require --pre-number).
                 if create_snapshot and plan.snapshot_id:
                     console.print(
                         "\n[bold cyan]📸 Creating post-update snapshot...[/bold cyan]"
                     )
                     post_success, _post_id, post_message = (
                         SnapshotManager.create_post_snapshot(
-                            description=f"After updating {len(plan.packages)} packages"
+                            description=f"After updating {len(plan.packages)} packages",
+                            pre_number=plan.snapshot_id,
                         )
                     )
                     if post_success:

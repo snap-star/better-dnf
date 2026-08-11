@@ -4,6 +4,9 @@ Btrfs snapshot management for safe system updates.
 
 from __future__ import annotations
 
+import csv
+import io
+import re
 import subprocess
 from datetime import datetime, timezone
 
@@ -69,14 +72,14 @@ class SnapshotManager:
     def create_snapshot(
         cls,
         description: str | None = None,
-        snapshot_type: str = "single",
+        snapshot_type: str = "pre",
     ) -> tuple[bool, str | None, str]:
         """
         Create a btrfs snapshot before applying updates.
 
         Args:
             description: Optional description for the snapshot
-            snapshot_type: Type of snapshot ('single' or 'pre/post')
+            snapshot_type: Type of snapshot ('pre', 'post' or 'single')
 
         Returns:
             Tuple of (success, snapshot_id, message)
@@ -96,7 +99,9 @@ class SnapshotManager:
 
         # Try snapper first
         if cls.is_snapper_installed():
-            return cls._create_snapper_snapshot(snapshot_name, description, "pre")
+            return cls._create_snapper_snapshot(
+                snapshot_name, description, snapshot_type
+            )
 
         # Fallback to btrfs subvolume snapshot
         return cls._create_btrfs_snapshot(snapshot_name, description)
@@ -105,12 +110,22 @@ class SnapshotManager:
     def create_post_snapshot(
         cls,
         description: str | None = None,
+        pre_number: str | None = None,
     ) -> tuple[bool, str | None, str]:
         """
         Create a post-update snapshot (completes the pre/post pair).
 
+        Snapper requires --pre-number for post snapshots and rejects the
+        request when the referenced snapshot is missing, is the current
+        snapshot, is not type 'pre', or already has a post snapshot.  Those
+        conditions are validated up front (with a clear error), and if the
+        pairing still fails a standalone 'single' snapshot is created as a
+        fallback so a backup still exists.
+
         Args:
             description: Optional description for the snapshot
+            pre_number: Number of the pre snapshot to pair with. When
+                omitted, the most recent 'pre' snapshot is used.
 
         Returns:
             Tuple of (success, snapshot_id, message)
@@ -130,10 +145,126 @@ class SnapshotManager:
 
         # Try snapper first
         if cls.is_snapper_installed():
-            return cls._create_snapper_snapshot(snapshot_name, description, "post")
+            # Load the snapshot list once: it is used both to resolve the
+            # latest 'pre' snapshot and to validate the pairing up front.
+            snapshots = cls._list_snapper_snapshots()
+
+            # Snapper requires --pre-number for post snapshots. When the
+            # caller didn't supply one, pair with the latest 'pre' snapshot.
+            if not pre_number:
+                pre_number = cls._find_latest_pre_number(snapshots=snapshots)
+                if pre_number is None:
+                    return (
+                        False,
+                        None,
+                        "No pre snapshot found. Create one first with "
+                        + "'better-dnf snapshot create'.",
+                    )
+
+            verdict = cls._validate_pre_for_pairing(snapshots, pre_number)
+            if verdict is not None:
+                return verdict
+
+            success, snap_id, message = cls._create_snapper_snapshot(
+                snapshot_name, description, "post", pre_number=pre_number
+            )
+            if success:
+                return (
+                    True,
+                    snap_id,
+                    f"{message} (paired with pre #{pre_number})",
+                )
+
+            # Snapper refused to pair (its daemon-side view can differ from
+            # what `snapper list` reported).  Fall back to a standalone
+            # snapshot so the user still has a post-update backup.
+            fallback_ok, fallback_id, fallback_msg = cls._create_snapper_snapshot(
+                snapshot_name, description, "single"
+            )
+            if fallback_ok:
+                return (
+                    True,
+                    fallback_id,
+                    "Pre/post pairing failed: "
+                    + f"{message}. Created a standalone snapshot instead "
+                    + f"({fallback_msg}). To pair manually, run: "
+                    + f"sudo snapper create -t post --pre-number {pre_number}",
+                )
+            return (False, None, f"Pre/post snapshot failed: {message}")
 
         # Fallback to btrfs subvolume snapshot
         return cls._create_btrfs_snapshot(snapshot_name, description)
+
+    @classmethod
+    def _validate_pre_for_pairing(
+        cls,
+        snapshots: list[dict],
+        pre_number: str,
+    ) -> tuple[bool, None, str] | None:
+        """Validate that a pre snapshot can be paired; None when usable.
+
+        Snapper fails a post create with "Illegal snapshot" when the
+        --pre-number reference is missing, is the current snapshot, is not
+        type 'pre', or already has a post snapshot.  These conditions are
+        detected here so the user gets a clear message instead of snapper's
+        cryptic error.
+
+        Returns:
+            None when the pairing is valid, otherwise an error tuple
+            (False, None, message).
+        """
+        target = next((s for s in snapshots if s.get("id") == str(pre_number)), None)
+        if target is None:
+            return (
+                False,
+                None,
+                (
+                    f"Pre snapshot #{pre_number} was not found in snapper. It "
+                    "may have been removed by cleanup or created in a "
+                    "different config. Create a fresh pre snapshot with "
+                    "'better-dnf snapshot create'."
+                ),
+            )
+        if target.get("type") != "pre":
+            return (
+                False,
+                None,
+                (
+                    f"Snapshot #{pre_number} is type '{target.get('type')}', "
+                    "not 'pre'. Post snapshots must pair with a 'pre' "
+                    "snapshot. Create one with 'better-dnf snapshot create'."
+                ),
+            )
+        existing_post = next(
+            (
+                s
+                for s in snapshots
+                if s.get("type") == "post"
+                and str(s.get("pre_num", "")).strip() == str(pre_number)
+            ),
+            None,
+        )
+        if existing_post is not None:
+            return (
+                False,
+                None,
+                (
+                    f"Snapshot #{pre_number} already has a post snapshot "
+                    f"(#{existing_post.get('id')}). Use 'better-dnf snapshot "
+                    "list' to see the existing pairs."
+                ),
+            )
+        return None
+
+    @classmethod
+    def _find_latest_pre_number(cls, snapshots: list[dict] | None = None) -> str | None:
+        """Find the most recent 'pre' snapshot number for post pairing."""
+        if snapshots is None:
+            snapshots = cls._list_snapper_snapshots()
+        pres = [s for s in snapshots if s.get("type") == "pre"]
+        if not pres:
+            return None
+        return max(pres, key=lambda s: int(s["id"]))["id"]
 
     @classmethod
     def _create_snapper_snapshot(
@@ -141,6 +272,7 @@ class SnapshotManager:
         snapshot_name: str,
         description: str | None,
         snapshot_type: str = "pre",
+        pre_number: str | None = None,
     ) -> tuple[bool, str | None, str]:
         """
         Create snapshot using snapper.
@@ -148,51 +280,42 @@ class SnapshotManager:
         Args:
             snapshot_name: Name for the snapshot
             description: Optional description
-            snapshot_type: Type of snapshot ('pre' or 'post')
+            snapshot_type: Type of snapshot ('pre', 'post' or 'single')
+            pre_number: Pre snapshot number (required for 'post')
 
         Returns:
             Tuple of (success, snapshot_id, message)
         """
         try:
-            # Create snapshot with specified type
-            result = run_sudo(
-                [
-                    "snapper",
-                    "create",
-                    "-d",
-                    description or snapshot_name,
-                    "-t",
-                    snapshot_type,
-                ],
-                timeout=30,
-            )
+            cmd = [
+                "snapper",
+                "create",
+                "-d",
+                description or snapshot_name,
+                "-t",
+                snapshot_type,
+            ]
+            if snapshot_type == "post":
+                if not pre_number:
+                    return (
+                        False,
+                        None,
+                        "Post snapshot requires a pre snapshot number.",
+                    )
+                cmd += ["--pre-number", str(pre_number)]
+            # Print the new snapshot number so we can return it reliably
+            cmd += ["-p"]
+
+            result = run_sudo(cmd, timeout=30)
 
             if result.returncode == 0:
-                # Get the snapshot number
-                list_result = run_sudo(
-                    [
-                        "snapper",
-                        "list",
-                        "--columns",
-                        "number",
-                        "--columns",
-                        "description",
-                        "--csvout",
-                    ],
-                    timeout=10,
-                )
-
-                # Extract the latest snapshot number
-                if list_result.returncode == 0:
-                    lines = list_result.stdout.strip().split("\n")
-                    if len(lines) > 1:
-                        latest = lines[-1].split(",")[0]
-                        return (
-                            True,
-                            latest,
-                            f"Snapshot created successfully: {latest}",
-                        )
-
+                snapshot_id = result.stdout.strip()
+                if snapshot_id:
+                    return (
+                        True,
+                        snapshot_id,
+                        f"Snapshot created successfully: {snapshot_id}",
+                    )
                 return (True, None, "Snapshot created successfully")
             else:
                 return (False, None, f"Failed to create snapshot: {result.stderr}")
@@ -279,85 +402,124 @@ class SnapshotManager:
     @classmethod
     def _list_snapper_snapshots(cls) -> list[dict]:
         """List snapshots using snapper."""
-        snapshots = []
         try:
-            # Try with --csvout first
-            result = run_sudo(
-                ["snapper", "list", "--csvout"],
-                timeout=10,
-            )
-
+            # Try machine-readable CSV first. --csvout is a GLOBAL option in
+            # snapper, so it must precede the 'list' command.
+            result = run_sudo(["snapper", "--csvout", "list"], timeout=10)
             if result.returncode == 0 and result.stdout.strip():
-                lines = result.stdout.strip().split("\n")
-                # Parse CSV output
-                for i, line in enumerate(lines):
-                    if i == 0:  # Skip header
-                        continue
-                    # Split by comma but handle quoted fields
-                    parts = line.split(",")
-                    if len(parts) >= 4:
-                        # Clean up each part
-                        snapshot_id = parts[0].strip().strip('"')
-                        # Skip if it's not a valid ID (like the header)
-                        if not snapshot_id.isdigit():
-                            continue
-                        snapshots.append(
-                            {
-                                "id": snapshot_id,
-                                "date": parts[1].strip().strip('"'),
-                                "description": parts[2].strip().strip('"'),
-                                "type": parts[3].strip().strip('"'),
-                            }
-                        )
-            else:
-                # If CSV fails, try plain output
-                result2 = run_sudo(
-                    ["snapper", "list"],
-                    timeout=10,
-                )
-                if result2.returncode == 0 and result2.stdout.strip():
-                    lines = result2.stdout.strip().split("\n")
-                    for line in lines:
-                        # Skip empty lines and separator lines
-                        if not line.strip() or line.startswith(("-", "│")):
-                            continue
-                        # Try to parse line with │ separators
-                        if "│" in line:
-                            parts = [p.strip() for p in line.split("│") if p.strip()]
-                            if len(parts) >= 4:
-                                snapshot_id = parts[0]
-                                if snapshot_id.isdigit():
-                                    snapshots.append(
-                                        {
-                                            "id": snapshot_id,
-                                            "date": parts[1] if len(parts) > 1 else "",
-                                            "description": (
-                                                parts[2] if len(parts) > 2 else ""
-                                            ),
-                                            "type": parts[3] if len(parts) > 3 else "",
-                                        }
-                                    )
-                        else:
-                            # Try space-separated format
-                            parts = line.split()
-                            if len(parts) >= 4:
-                                snapshot_id = parts[0]
-                                if snapshot_id.isdigit():
-                                    snapshots.append(
-                                        {
-                                            "id": snapshot_id,
-                                            "date": parts[1] if len(parts) > 1 else "",
-                                            "description": (
-                                                " ".join(parts[2:-1])
-                                                if len(parts) > 2
-                                                else ""
-                                            ),
-                                            "type": parts[-1] if len(parts) > 1 else "",
-                                        }
-                                    )
-        except Exception:  # noqa: BLE001, S110
+                snapshots = cls._parse_snapper_csv(result.stdout)
+                if snapshots:
+                    return snapshots
+
+            # Fall back to the human-readable table format
+            result2 = run_sudo(["snapper", "list"], timeout=10)
+            if result2.returncode == 0 and result2.stdout.strip():
+                return cls._parse_snapper_table(result2.stdout)
+        except Exception:  # noqa: BLE001, S110 - best-effort listing
             pass
 
+        return []
+
+    @staticmethod
+    def _parse_snapper_csv(text: str) -> list[dict]:
+        """Parse 'snapper --csvout list' output using the header to map columns.
+
+        Real snapper CSV columns: #,Type,Pre #,Date,User,Cleanup,Description,Userdata
+        Older/simpler formats may be Number,Date,Description,Type - handled by
+        matching column names from the header row.
+        """
+        snapshots: list[dict] = []
+        try:
+            reader = csv.reader(io.StringIO(text))
+            header = next(reader, None)
+            if not header:
+                return snapshots
+            cols = {name.strip().lower(): i for i, name in enumerate(header)}
+            num_col = cols.get("number", cols.get("#", 0))
+            type_col = cols.get("type")
+            date_col = cols.get("date")
+            desc_col = cols.get("description")
+            pre_num_col = cols.get(
+                "pre #", cols.get("pre-number", cols.get("pre_number"))
+            )
+
+            for row in reader:
+                if num_col >= len(row) or not row[num_col].strip().isdigit():
+                    continue
+                snapshots.append(
+                    {
+                        "id": row[num_col].strip(),
+                        "date": (
+                            row[date_col].strip()
+                            if date_col is not None and date_col < len(row)
+                            else ""
+                        ),
+                        "description": (
+                            row[desc_col].strip()
+                            if desc_col is not None and desc_col < len(row)
+                            else ""
+                        ),
+                        "type": (
+                            row[type_col].strip()
+                            if type_col is not None and type_col < len(row)
+                            else ""
+                        ),
+                        "pre_num": (
+                            row[pre_num_col].strip()
+                            if pre_num_col is not None and pre_num_col < len(row)
+                            else ""
+                        ),
+                    }
+                )
+        except Exception:  # noqa: BLE001 - surface nothing, return what we parsed
+            return snapshots
+        return snapshots
+
+    @staticmethod
+    def _parse_snapper_table(text: str) -> list[dict]:
+        """Parse 'snapper list' table output using the header to map columns.
+
+        Real snapper table columns: # | Type | Pre # | Date | User | Cleanup |
+        Description | Userdata.  The header row is located first, then each
+        data row is mapped by column position so the 'type' field is correct
+        regardless of which columns snapper decides to print.
+        """
+        snapshots: list[dict] = []
+        lines = text.splitlines()
+        header_idx = None
+        cols: dict[str, int] = {}
+
+        for i, line in enumerate(lines):
+            parts = [p.strip() for p in re.split(r"[|│]", line)]
+            lowered = [p.lower() for p in parts]
+            if "type" in lowered and ("date" in lowered or "#" in lowered):
+                header_idx = i
+                cols = {p.lower(): j for j, p in enumerate(parts) if p}
+                break
+
+        if header_idx is None:
+            return snapshots
+
+        num_col = cols.get("#", cols.get("number", 0))
+        type_col = cols.get("type")
+        date_col = cols.get("date")
+        desc_col = cols.get("description")
+        pre_num_col = cols.get("pre #", cols.get("pre-number", cols.get("pre_number")))
+
+        for line in lines[header_idx + 1 :]:
+            parts = [p.strip() for p in re.split(r"[|│]", line)]
+            # Skip separator rows (e.g. ----+------+-----) and empty rows
+            if num_col >= len(parts) or not parts[num_col].isdigit():
+                continue
+            snapshots.append(
+                {
+                    "id": parts[num_col],
+                    "date": parts[date_col] if date_col is not None else "",
+                    "description": parts[desc_col] if desc_col is not None else "",
+                    "type": parts[type_col] if type_col is not None else "",
+                    "pre_num": (parts[pre_num_col] if pre_num_col is not None else ""),
+                }
+            )
         return snapshots
 
     @classmethod

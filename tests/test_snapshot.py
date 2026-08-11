@@ -94,6 +94,20 @@ class TestCreateSnapshot:
         args = mock_snapper.call_args.args
         assert args[2] == "pre"
 
+    def test_respects_snapshot_type(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "42", "ok"),
+            ) as mock_snapper,
+        ):
+            SnapshotManager.create_snapshot(snapshot_type="single")
+
+        assert mock_snapper.call_args.args[2] == "single"
+
     def test_falls_back_to_btrfs(self):
         with (
             patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
@@ -127,26 +141,91 @@ class TestCreateSnapshot:
         assert "before-updates" in snapshot_name
 
 
+class TestFindLatestPreNumber:
+    """Tests for finding the latest pre snapshot for post pairing."""
+
+    def test_returns_highest_pre_id(self):
+        with patch.object(
+            SnapshotManager,
+            "_list_snapper_snapshots",
+            return_value=[
+                {"id": "10", "type": "single"},
+                {"id": "11", "type": "pre"},
+                {"id": "12", "type": "pre"},
+                {"id": "13", "type": "single"},
+            ],
+        ):
+            assert SnapshotManager._find_latest_pre_number() == "12"
+
+    def test_returns_none_when_no_pre(self):
+        with patch.object(
+            SnapshotManager,
+            "_list_snapper_snapshots",
+            return_value=[{"id": "10", "type": "single"}],
+        ):
+            assert SnapshotManager._find_latest_pre_number() is None
+
+
 class TestCreatePostSnapshot:
     """Tests for create_post_snapshot."""
 
-    def test_uses_pre_type_and_post_prefix(self):
+    def test_uses_post_type_and_post_prefix(self):
         with (
             patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
             patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "42", "type": "pre", "pre_num": ""}],
+            ),
+            patch.object(SnapshotManager, "_find_latest_pre_number", return_value="42"),
             patch.object(
                 SnapshotManager,
                 "_create_snapper_snapshot",
                 return_value=(True, "43", "ok"),
             ) as mock_snapper,
         ):
-            ok, snap_id, _msg = SnapshotManager.create_post_snapshot()
+            ok, snap_id, msg = SnapshotManager.create_post_snapshot()
 
         assert ok is True
         assert snap_id == "43"
         snapshot_name, _, snapshot_type = mock_snapper.call_args.args
         assert snapshot_type == "post"
         assert "-post-" in snapshot_name
+        assert mock_snapper.call_args.kwargs["pre_number"] == "42"
+        assert "paired with pre #42" in msg
+
+    def test_passes_pre_number_through(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "99", "type": "pre", "pre_num": ""}],
+            ),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "43", "ok"),
+            ) as mock_snapper,
+        ):
+            ok, _snap_id, _msg = SnapshotManager.create_post_snapshot(pre_number="99")
+
+        assert ok is True
+        assert mock_snapper.call_args.kwargs["pre_number"] == "99"
+
+    def test_no_pre_snapshot_returns_error(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(SnapshotManager, "_list_snapper_snapshots", return_value=[]),
+            patch.object(SnapshotManager, "_find_latest_pre_number", return_value=None),
+        ):
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot()
+
+        assert ok is False
+        assert "No pre snapshot found" in msg
 
     def test_non_btrfs_returns_failure(self):
         with patch.object(SnapshotManager, "is_btrfs_root", return_value=False):
@@ -155,29 +234,120 @@ class TestCreatePostSnapshot:
         assert ok is False
         assert "not btrfs" in msg
 
+    def test_pre_not_found_returns_clear_error(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "10", "type": "single", "pre_num": ""}],
+            ),
+        ):
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot(pre_number="999")
+
+        assert ok is False
+        assert "999" in msg
+        assert "not found" in msg
+
+    def test_pre_wrong_type_returns_clear_error(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "42", "type": "single", "pre_num": ""}],
+            ),
+        ):
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot(pre_number="42")
+
+        assert ok is False
+        assert "not 'pre'" in msg
+
+    def test_pre_already_paired_returns_clear_error(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[
+                    {"id": "42", "type": "pre", "pre_num": ""},
+                    {"id": "43", "type": "post", "pre_num": "42"},
+                ],
+            ),
+        ):
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot(pre_number="42")
+
+        assert ok is False
+        assert "already has a post" in msg
+        assert "#43" in msg
+
+    def test_pairing_failure_falls_back_to_standalone(self):
+        """When snapper rejects the pair, a standalone snapshot is created."""
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "42", "type": "pre", "pre_num": ""}],
+            ),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                side_effect=[
+                    (False, None, "Illegal snapshot"),
+                    (True, "50", "Snapshot created successfully: 50"),
+                ],
+            ) as mock_snapper,
+        ):
+            ok, snap_id, msg = SnapshotManager.create_post_snapshot(pre_number="42")
+
+        assert ok is True
+        assert snap_id == "50"
+        assert "standalone" in msg
+        assert "Illegal snapshot" in msg
+        assert "--pre-number 42" in msg
+        # First call: post with pre-number. Second call: standalone single.
+        first = mock_snapper.call_args_list[0]
+        assert first.args[2] == "post"
+        assert first.kwargs["pre_number"] == "42"
+        second = mock_snapper.call_args_list[1]
+        assert second.args[2] == "single"
+
+    def test_fallback_failure_returns_original_error(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "42", "type": "pre", "pre_num": ""}],
+            ),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(False, None, "Illegal snapshot"),
+            ),
+        ):
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot(pre_number="42")
+
+        assert ok is False
+        assert "Pre/post snapshot failed" in msg
+        assert "Illegal snapshot" in msg
+
 
 class TestCreateSnapperSnapshot:
     """Tests for the snapper-backed creation."""
 
-    def test_success_extracts_latest_id(self):
-        # First call: snapper create succeeds. Second call: snapper list
-        # returns the CSV from which the latest snapshot number is extracted.
-        calls = [
-            _cp(0, stdout=""),
-            _cp(
-                0,
-                stdout=(
-                    "Number,Date,Description,Type\n"
-                    "0,date,current,single\n"
-                    "42,date,my-snap,single\n"
-                ),
-            ),
-        ]
-
-        def fake_run_sudo(cmd, **kwargs):
-            return calls.pop(0)
-
-        with patch("better_dnf.snapshot.run_sudo", side_effect=fake_run_sudo):
+    def test_success_parses_print_number(self):
+        # 'snapper create -p' prints the new snapshot number to stdout.
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout="42\n"),
+        ) as run:
             ok, snap_id, msg = SnapshotManager._create_snapper_snapshot(
                 "better-dnf-20260811", None, "pre"
             )
@@ -185,12 +355,15 @@ class TestCreateSnapperSnapshot:
         assert ok is True
         assert snap_id == "42"
         assert "42" in msg
+        # Uses --print-number, not a separate snapper list call
+        cmd = run.call_args.args[0]
+        assert "-p" in cmd
+        assert "list" not in cmd
 
-    def test_success_without_list_output(self):
-        calls = [_cp(0), _cp(0, stdout="")]
-
+    def test_success_without_print_number_output(self):
         with patch(
-            "better_dnf.snapshot.run_sudo", side_effect=lambda *a, **k: calls.pop(0)
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout=""),
         ):
             ok, snap_id, msg = SnapshotManager._create_snapper_snapshot(
                 "better-dnf-20260811", None, "pre"
@@ -199,6 +372,33 @@ class TestCreateSnapperSnapshot:
         assert ok is True
         assert snap_id is None
         assert "Snapshot created successfully" in msg
+
+    def test_post_passes_pre_number_flag(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout="43\n"),
+        ) as run:
+            ok, snap_id, _msg = SnapshotManager._create_snapper_snapshot(
+                "better-dnf-post-20260811", None, "post", "42"
+            )
+
+        assert ok is True
+        assert snap_id == "43"
+        cmd = run.call_args.args[0]
+        assert "--pre-number" in cmd
+        assert cmd[cmd.index("--pre-number") + 1] == "42"
+        assert "-t" in cmd
+        assert cmd[cmd.index("-t") + 1] == "post"
+
+    def test_post_without_pre_number_fails(self):
+        with patch("better_dnf.snapshot.run_sudo") as run:
+            ok, _snap_id, msg = SnapshotManager._create_snapper_snapshot(
+                "better-dnf-post-20260811", None, "post", None
+            )
+
+        assert ok is False
+        assert "pre snapshot number" in msg
+        run.assert_not_called()
 
     def test_failure_returns_error(self):
         with patch(
@@ -322,30 +522,54 @@ class TestListSnapshots:
         mock_btrfs.assert_called_once()
 
     def test_parse_csv_output(self):
+        # Real snapper --csvout column order: #,Type,Pre #,Date,User,...
         csv = (
-            "Number,Date,Description,Type\n"
-            "0,date,current,single\n"
-            '42,"2026-08-11 10:00:00","my snapshot",single\n'
-            "not-a-number,date,x,single\n"
+            "#,Type,Pre #,Date,User,Cleanup,Description,Userdata\n"
+            "0,single,,,root,,current,\n"
+            '42,single,,2026-08-11 10:00:00,root,,"my snapshot",\n'
+            "307,pre,,2026-08-11 00:54:52,root,,better-dnf-snap,\n"
+            "43,post,42,2026-08-11 11:00:00,root,,post-snap,\n"
+            "not-a-number,single,,x,root,,x,\n"
         )
         with patch("better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=csv)):
             result = SnapshotManager._list_snapper_snapshots()
 
-        ids = [s["id"] for s in result]
-        assert "42" in ids
-        assert "0" in ids
+        by_id = {s["id"]: s for s in result}
+        assert "42" in by_id
+        assert "0" in by_id
+        assert "307" in by_id
+        assert "43" in by_id
         # Non-numeric IDs are skipped
-        assert len(ids) == 2
+        assert len(result) == 4
+        # Type and date come from the CORRECT columns
+        assert by_id["307"]["type"] == "pre"
+        assert by_id["42"]["type"] == "single"
+        assert by_id["42"]["date"] == "2026-08-11 10:00:00"
+        # The Pre # column links a post snapshot to its pre
+        assert by_id["43"]["type"] == "post"
+        assert by_id["43"]["pre_num"] == "42"
 
-    def test_fallback_to_pipe_format(self):
+    def test_parse_csv_legacy_columns(self):
+        # Older/simpler formats (Number,Date,Description,Type) still work
+        csv = "Number,Date,Description,Type\n0,date,current,single\n42,date,my-snap,single\n"
+        with patch("better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=csv)):
+            result = SnapshotManager._list_snapper_snapshots()
+
+        by_id = {s["id"]: s for s in result}
+        assert by_id["42"]["type"] == "single"
+        assert by_id["42"]["description"] == "my-snap"
+
+    def test_fallback_to_table_format(self):
+        # Real snapper table format: # | Type | Pre # | Date | User | ...
         plain = (
-            "Type │ Pre # │ Date │ User │ Description\n"
-            "0 │ │ 2026-08-11 │ root │ current\n"
-            "─────────────── separator ───────────────\n"
-            "42 │ │ 2026-08-11 │ root │ my-snap\n"
-            "│ │ only separators │\n"
+            "   # | Type | Pre # | Date                     | User | Cleanup | Description | Userdata\n"
+            "----+------+-------+--------------------------+------+---------+-------------+--------\n"
+            "   0 | single|       |                          | root |         | current     |        \n"
+            "  42 | single|       | 2026-08-11 10:00:00      | root |         | my-snap      |        \n"
+            " 307 | pre   |       | 2026-08-11 00:54:52      | root |         | better-dnf-1 |        \n"
+            "  43 | post  | 42    | 2026-08-11 11:00:00      | root |         | post-snap    |        \n"
         )
-        # First call (--csvout) fails, second (plain) succeeds
+        # First call (--csvout) fails, second (plain table) succeeds
         calls = [_cp(1), _cp(0, stdout=plain)]
 
         with patch(
@@ -353,11 +577,17 @@ class TestListSnapshots:
         ):
             result = SnapshotManager._list_snapper_snapshots()
 
-        ids = [s["id"] for s in result]
-        assert "42" in ids
-        assert "0" in ids
-        # Separator lines ('-...' and '│...') are skipped
-        assert len(ids) == 2
+        by_id = {s["id"]: s for s in result}
+        assert "42" in by_id
+        assert "0" in by_id
+        assert "43" in by_id
+        # Separator rows are skipped; type parsed from the correct column
+        assert len(result) == 4
+        assert by_id["307"]["type"] == "pre"
+        assert by_id["42"]["date"] == "2026-08-11 10:00:00"
+        # The Pre # column links a post snapshot to its pre
+        assert by_id["43"]["type"] == "post"
+        assert by_id["43"]["pre_num"] == "42"
 
     def test_parse_btrfs_output(self):
         # Real 'btrfs subvolume list' output has no header line.

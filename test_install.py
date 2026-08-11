@@ -40,7 +40,7 @@ def check_python_version():
 def check_dependencies():
     """Check if dependencies are installed."""
     print("\nChecking dependencies...")
-    dependencies = ["typer", "rich", "questionary", "pyyaml", "requests", "packaging"]
+    dependencies = ["typer", "rich", "questionary", "packaging"]
     
     all_ok = True
     for dep in dependencies:

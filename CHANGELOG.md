@@ -5,6 +5,40 @@ All notable changes to Better DNF will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### 🐛 Fixed
+
+- **`apply updates` keeps the controlling terminal for sudo** - The `dnf upgrade` child was spawned with `start_new_session=True` (setsid), which detaches from the controlling terminal. Fedora's sudo enables `tty_tickets` by default, keying its credential cache to the controlling terminal, so the detached child couldn't see the credentials just cached by `sudo -n -v` and failed with "a terminal is required to read the password". The child now runs in its own process group via `preexec_fn=os.setpgrp` (Ctrl+C `killpg` cleanup still works) while keeping the terminal.
+- **Sudo probes no longer execute the target command** - Authentication was checked by running `sudo -n <command>`, which could execute effectful commands twice (e.g. `snapper create` ran once as a "probe" and once for real — the second attempt failed with snapper's "Illegal snapshot" because the pre snapshot already had a post; the `dnf upgrade` probe had the same double-run risk). Credentials are now checked with `sudo -n -v` (runs nothing) and validated with `sudo -S -v`. A per-command NOPASSWD probe inside `run_sudo` reuses its own result, so commands never run more than once. This also eliminates the spurious double password prompt.
+- **`snapshot create post` validates the pre snapshot first** - Reports clear errors when the pre-number is missing, isn't type `pre`, or already has a post snapshot, instead of snapper's cryptic "Illegal snapshot".
+- **Standalone fallback for failed post pairing** - If snapper still refuses the pre/post pair, a standalone `single` snapshot is created automatically so a backup always exists, with the reason and a manual pairing command (`sudo snapper create -t post --pre-number <N>`) shown.
+- **`--pre-number` CLI flag** - `better-dnf snapshot create post --pre-number <N>` pairs with a specific pre snapshot instead of the latest one.
+
+### 🧹 Removed
+
+- **Unused `requests` and `pyyaml` dependencies** - Neither is imported anywhere in the codebase; both were declared ahead of planned features (config file support, advisory enrichment). Re-add them when those features land.
+
+### 🧪 Testing
+
+- **231 unit tests** across 7 test files (up from 222):
+  - `test_sudo.py` (15) — added: probe never runs effectful commands; NOPASSWD probe reuses its result (single execution); sudo-missing error
+  - `test_snapshot.py` (46) — added: pre snapshot verification (missing / wrong type / already paired), standalone fallback, `Pre #` column parsing
+  - `test_cli.py` (50) — added: `--pre-number` flag
+  - `test_updater.py` (16) — added: Popen keeps the controlling terminal (no `start_new_session`)
+- Module coverage: `sudo` 86%, `snapshot` 92%, `updater` 71% (total 84%, `fail_under` gate 80%)
+
+### 🚧 Planned
+
+- [ ] Configuration file support (`~/.config/better-dnf/config.yaml`)
+- [ ] Dry-run mode for previewing changes
+- [ ] Batch update support
+- [ ] Export/import update plans
+- [ ] System requirements checking
+- [ ] Auto-update checking for better-dnf itself
+
+---
+
 ## [1.0.0] - 2026-08-11
 
 ### 🎉 First Stable Release
@@ -47,6 +81,9 @@ This is the first stable release of Better DNF with complete functionality for s
 
 ### 🔧 Fixed
 
+- **Post-update snapshot now created after successful updates** - The post snapshot was silently skipped because the snapshot ID was guessed via a fragile `snapper list` parse (returning `None`, so the post path never ran). Now uses `snapper create -p` (prints the real snapshot number) and passes `--pre-number` so snapper creates a proper pre/post pair.
+- **`snapshot create post` command** - New `better-dnf snapshot create post` (and `-t/--type`) to manually create post snapshots; auto-pairs with the latest `pre` snapshot when no `--pre-number` is given.
+- **Snapshot list column parsing** - Fixed misaligned `type`/`date`/`description` columns in `snapshot list` (real snapper columns are `# | Type | Pre # | Date | User | Cleanup | Description | Userdata`); now header-based so `pre`/`post`/`single` types display and pair correctly.
 - **Security updates detection** - Fixed parsing of security update info
 - **User apps categorization** - Fixed detection of user-installed packages
 - **Download size calculation** - Fixed to show actual download sizes
@@ -57,9 +94,9 @@ This is the first stable release of Better DNF with complete functionality for s
 
 ### 🧪 Testing
 
-- **209 unit tests** across 7 test files — full module coverage:
-  - `test_cli.py` (44) — all 7 CLI commands (analyze, list-updates, security, snapshot, history, version), strategy selection, confirmation flow
-  - `test_snapshot.py` (33) — create/list/rollback, snapper + btrfs backends, CSV/pipe parsing
+- **222 unit tests** across 7 test files — full module coverage:
+  - `test_cli.py` (49) — all 7 CLI commands (analyze, list-updates, security, snapshot incl. `create post`, history, version), strategy selection, confirmation flow
+  - `test_snapshot.py` (41) — create/list/rollback, pre/post pairing with `--pre-number`, snapper + btrfs backends, header-based CSV/table parsing
   - `test_selector.py` (25) — interactive menu navigation (back/cancel/escape), package selection, confirm warnings
   - `test_parser.py` (64) — dnf check-update parsing, categorization, command helpers, enrichment pipeline (**100% module coverage**)
   - `test_updater.py` (15) — apply flow, password feed via `sudo -S`, Ctrl+C/timeout handling
@@ -72,9 +109,9 @@ This is the first stable release of Better DNF with complete functionality for s
 #### 📈 Coverage Reporting
 
 - Added `[tool.coverage]` configuration to `pyproject.toml` — per-module line coverage via `pytest-cov`
-- **83% total line coverage**, `fail_under = 80` gate enforced
+- **84% total line coverage**, `fail_under = 80` gate enforced
 - `make test-cov` now generates terminal (weakest-first, with missing lines) + HTML + XML reports
-- Module coverage: `__init__` 100%, `parser` 100%, `sudo` 95%, `snapshot` 90%, `models` 88%, `cli` 85%, `analyzer` 79%, `updater` 71%, `selector` 60%
+- Module coverage: `__init__` 100%, `parser` 100%, `sudo` 95%, `snapshot` 91%, `models` 88%, `cli` 86%, `analyzer` 79%, `updater` 71%, `selector` 60%
 - Added `coverage.xml` / `.coverage.*` to `.gitignore`
 
 ### 📝 Changed
@@ -120,18 +157,6 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 - **Major**: Breaking changes to CLI interface or configuration format
 - **Minor**: New features, commands, or significant improvements
 - **Patch**: Bug fixes, documentation updates, minor improvements
-
----
-
-## [Unreleased]
-
-### Planned Features
-- [ ] Configuration file support (`~/.config/better-dnf/config.yaml`)
-- [ ] Dry-run mode for previewing changes
-- [ ] Batch update support
-- [ ] Export/import update plans
-- [ ] System requirements checking
-- [ ] Auto-update checking for better-dnf itself
 
 ---
 

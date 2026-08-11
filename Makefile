@@ -24,14 +24,17 @@ install-dev:
 	pip install -e ".[dev]"
 
 # Run tests
+# PYTHONPATH=src ensures we test the source tree, not whatever copy of
+# better_dnf happens to be pip-installed (a stale 'pip install .' would
+# otherwise shadow the edited code and give misleading results).
 test:
-	pytest tests/ -v
+	PYTHONPATH=src pytest tests/ -v
 
 # Run tests with coverage
 # Terminal report shows per-module percentages + missing lines (fail_under enforced)
 # HTML report for browsing, XML report for CI (codecov)
 test-cov:
-	pytest tests/ -v --cov=better_dnf --cov-report=term-missing --cov-report=html --cov-report=xml
+	PYTHONPATH=src pytest tests/ -v --cov=better_dnf --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # Run linter
 lint:

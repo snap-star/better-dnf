@@ -2,10 +2,22 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Fedora](https://img.shields.io/badge/Fedora-35+-294172.svg)](https://getfedora.org/)
+[![Fedora](https://img.shields.io/badge/Fedora-42+-294172.svg)](https://getfedora.org/)
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/snap-star/better-dnf)
 
 A smarter DNF update tool that categorizes updates and lets you choose what to install safely. Perfect for old hardware where blind `sudo dnf upgrade` might cause driver crashes, black screens, or system instability.
+
+## 📚 Documentation
+
+The full docs live in [`docs/`](docs/) (an [MkDocs](https://www.mkdocs.org/) site) — this README is the landing page:
+
+| Page | Contents |
+|------|----------|
+| [User Guide](docs/user-guide.md) | The `analyze` workflow, update strategies, custom selection, snapshots, rollback, safety model, troubleshooting |
+| [Command Reference](docs/command-reference.md) | Every command with all options and examples (verified against the CLI) |
+| [Index](docs/index.md) | Overview, installation, quick start |
+
+Serve it locally with `mkdocs serve` (or `make docs`).
 
 ## 🎯 Why Better DNF?
 
@@ -86,9 +98,10 @@ Complete pre/post snapshot protection:
 | `post` | After update | System state after changes |
 | `single` | Manual/Timeline | Standalone backup |
 
-- 🔄 **Pre/Post pairs** - Complete before/after comparison
+- 🔄 **Pre/Post pairs** - Complete before/after comparison; post snapshots are linked to their pre via `--pre-number`
 - 🔙 **One-click rollback** - Restore if something breaks
 - 🔗 **Snapper integration** - Works with existing snapper setups
+- 🧩 **Manual completion** - `better-dnf snapshot create post` pairs with the latest pre snapshot if one is missing
 
 ## 🚀 Installation
 
@@ -132,12 +145,11 @@ Automatically installed with pip:
 | `typer` | CLI framework with rich help text |
 | `rich` | Beautiful terminal output and tables |
 | `questionary` | Interactive prompts and menus |
-| `pyyaml` | Configuration file support |
 | `packaging` | Version parsing and comparison |
 
 ### System Requirements
 
-- **OS**: Fedora 35 or later
+- **OS**: Fedora 42 or later (COPR packages; older releases may still work when run from source)
 - **Python**: 3.9 or later
 - **Optional**: `snapper` for advanced snapshot management
 - **Optional**: `btrfs` for native snapshot support
@@ -200,8 +212,20 @@ better-dnf security --apply
 ### Snapshot Management
 
 ```bash
-# Create a new snapshot
+# Create a new 'pre' snapshot (default)
 better-dnf snapshot create
+
+# Create a 'post' snapshot (pairs with the latest pre snapshot)
+better-dnf snapshot create post
+
+# Pair with a specific pre snapshot
+better-dnf snapshot create post --pre-number 307
+
+# Create a standalone snapshot
+better-dnf snapshot create single
+
+# Create with a custom description
+better-dnf snapshot create post --description "after kernel update"
 
 # List all snapshots
 better-dnf snapshot list
@@ -209,6 +233,10 @@ better-dnf snapshot list
 # Rollback to a specific snapshot
 better-dnf snapshot rollback <snapshot-id>
 ```
+
+Better-dnf automatically creates the `post` snapshot after a successful update, linked to the `pre` snapshot it was paired with (snapper requires `--pre-number` for post snapshots). If an update fails or the post snapshot is missing, you can complete the pair manually with `better-dnf snapshot create post`.
+
+Before pairing, better-dnf verifies the pre snapshot exists, is type `pre`, and isn't already paired — so you get a clear message instead of snapper's cryptic "Illegal snapshot" error. If snapper still refuses the pair, a standalone `single` snapshot is created as a fallback so a backup always exists.
 
 ### Update History
 
@@ -270,11 +298,13 @@ better-dnf analyze
 | `better-dnf list-updates` | ❌ | List available updates |
 | `better-dnf security` | ❌ | Show security updates |
 | `better-dnf snapshot list` | ✅ | List system snapshots |
-| `better-dnf snapshot create` | ✅ | Create new snapshot |
+| `better-dnf snapshot create` | ✅ | Create new snapshot (pre/post/single) |
 | `better-dnf snapshot rollback` | ✅ | Rollback system state |
 | `better-dnf history` | ✅ | View update history |
 
 When sudo is needed, your system will prompt for your password.
+
+Sudo handling is built to work without a terminal: credentials are checked with `sudo -n -v` (runs nothing, so commands are never double-executed as "probes"), and when a password is required it's collected via a masked prompt and fed through `sudo -S`. During updates the `dnf` child runs in its own process group but **keeps the controlling terminal**, so Fedora's default `tty_tickets` credential cache stays visible — eliminating the old "a terminal is required to read the password" failure.
 
 ### ⚠️ Risk Assessment
 
@@ -333,7 +363,8 @@ sudo dnf history undo <transaction-id>
 |---------|--------|-------------|
 | No auto-apply | ✅ | Updates require explicit confirmation |
 | Pre-update snapshot | ✅ | Creates snapshot before changes |
-| Post-update snapshot | ✅ | Creates snapshot after success |
+| Post-update snapshot | ✅ | Creates snapshot after success, paired with the pre snapshot |
+| Manual post snapshot | ✅ | `better-dnf snapshot create post` completes a missing pair |
 | Package preview | ✅ | See what will be installed |
 | Navigation support | ✅ | Back/Cancel in all menus |
 | Read-only analysis | ✅ | Analysis commands don't modify system |
@@ -428,24 +459,24 @@ Update Importance:
 
 ## 🧪 Testing
 
-Better DNF ships with a comprehensive test suite (**209 tests**, all passing) covering every module and CLI command.
+Better DNF ships with a comprehensive test suite (**231 tests**, all passing) covering every module and CLI command.
 
 ### Test Coverage by Module
 
 | Test File | Tests | Covers |
 |-----------|-------|--------|
-| `test_cli.py` | 44 | All CLI commands: analyze flow, list-updates, security, snapshot, history, version |
-| `test_snapshot.py` | 33 | Snapshot create/list/rollback, snapper & btrfs backends, parsing |
+| `test_cli.py` | 50 | All CLI commands: analyze flow, list-updates, security, snapshot (incl. create post), history, version |
+| `test_snapshot.py` | 46 | Snapshot create/list/rollback, pre/post pairing + validation, standalone fallback, snapper & btrfs backends, parsing |
 | `test_selector.py` | 25 | Interactive menus: strategy selection, back/cancel navigation, confirmation |
 | `test_analyzer.py` | 15 | Importance analysis, categorization, risk assessment |
-| `test_updater.py` | 15 | apply_updates flow: sudo password feed, Ctrl+C, timeout, snapshots |
+| `test_updater.py` | 16 | apply_updates flow: sudo password feed, Ctrl+C, timeout, snapshots, controlling-terminal regression |
 | `test_parser.py` | 64 | DNF output parsing, categorization, command helpers, enrichment pipeline |
-| `test_sudo.py` | 13 | Sudo credential handling: cached creds, retry, cancel, NOPASSWD probe |
+| `test_sudo.py` | 15 | Sudo credential handling: cached creds, retry, cancel, NOPASSWD, no side-effect probing |
 
 ### Key Test Coverage Highlights
 
 - 🧭 **Navigation** - Back/cancel options and menu looping in all interactive flows
-- 🔑 **Sudo without terminal** - Masked password prompt, `sudo -S` stdin feed, 3-attempt retry, NOPASSWD awareness
+- 🔑 **Sudo without terminal** - Masked password prompt, `sudo -S` stdin feed, 3-attempt retry, NOPASSWD awareness, commands never run as probes, update child keeps the controlling terminal (Fedora `tty_tickets` cache works)
 - ⚡ **Ctrl+C safety** - Graceful process-group termination during updates
 - 📊 **CLI flows** - Every command tested end-to-end via `typer.testing.CliRunner`
 - 🧱 **Snapshot parsing** - CSV, pipe, and btrfs output formats
@@ -472,6 +503,8 @@ pytest --collect-only
 ```
 
 All tests mock subprocess/interactive prompts, so no root access or live package repositories are needed.
+
+> 💡 `make test` and `make test-cov` run pytest with `PYTHONPATH=src`, so they always test the source tree — even if a stale copy of `better-dnf` happens to be pip-installed in site-packages.
 
 ### 📈 Coverage Reporting
 
@@ -502,14 +535,14 @@ Reports generated by `make test-cov`:
 |--------|----------|-------|
 | `__init__.py` | 100% | |
 | `parser.py` | 100% | DNF output parsing, categorization, enrichment pipeline |
-| `sudo.py` | 95% | Credential handling, retry, NOPASSWD probe |
-| `snapshot.py` | 90% | Snapper + btrfs backends, parsing |
-| `models.py` | 88% | Data models |
-| `cli.py` | 85% | CLI commands and flows |
+| `sudo.py` | 86% | Credential handling, retry, NOPASSWD, side-effect-free probing |
+| `snapshot.py` | 92% | Snapper + btrfs backends, pre/post pairing + validation, header-based parsing |
+| `models.py` | 89% | Data models |
+| `cli.py` | 86% | CLI commands and flows |
 | `analyzer.py` | 79% | Importance & risk analysis |
 | `updater.py` | 71% | Update application, interrupts, snapshots |
 | `selector.py` | 60% | Interactive menus |
-| **Total** | **83%** | `fail_under` gate: 80% |
+| **Total** | **84%** | `fail_under` gate: 80% |
 
 > 💡 The `fail_under = 80` gate in `pyproject.toml` makes the test command exit non-zero if coverage drops below 80% — this protects the suite in CI. Raise it as coverage improves.
 
@@ -546,9 +579,10 @@ black .
 ```
 better-dnf/
 ├── .github/
+│   ├── SECRETS.md           # GitHub Actions secrets setup
 │   └── workflows/
 │       ├── ci.yml           # CI/CD pipeline
-│       ├── copr-build.yml   # COPR auto-build
+│       ├── copr-build.yml   # COPR auto-build (SCM from GitHub tag)
 │       └── release.yml      # Release automation
 ├── src/
 │   └── better_dnf/
@@ -563,18 +597,26 @@ better-dnf/
 │       └── models.py        # Data models
 ├── tests/
 │   ├── test_analyzer.py     # 15 tests
-│   ├── test_cli.py          # 44 tests
+│   ├── test_cli.py          # 50 tests
 │   ├── test_parser.py       # 64 tests
 │   ├── test_selector.py     # 25 tests
-│   ├── test_snapshot.py     # 33 tests
-│   ├── test_sudo.py         # 13 tests
-│   └── test_updater.py      # 15 tests
+│   ├── test_snapshot.py     # 46 tests
+│   ├── test_sudo.py         # 15 tests
+│   └── test_updater.py      # 16 tests
 ├── better-dnf.spec          # RPM spec file
 ├── CHANGELOG.md             # Version history
+├── CONTRIBUTING.md          # Contribution guidelines
+├── Makefile                 # Dev commands (test/lint/format/check)
 ├── PUBLISHING.md            # Publishing guide
 ├── README.md
 ├── LICENSE
-└── pyproject.toml
+├── pyproject.toml
+├── scripts/                 # COPR / SRPM / setup helper scripts
+├── docs/                    # MkDocs documentation site
+│   ├── index.md             #   Overview, install, quick start
+│   ├── user-guide.md        #   Workflows, snapshots, troubleshooting
+│   └── command-reference.md #   Every command + option
+└── mkdocs.yml               # Docs site config (nav, theme)
 ```
 
 ### CI/CD Automation
@@ -584,7 +626,7 @@ This project uses GitHub Actions for:
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `ci.yml` | Push/PR | Tests, linting, type checking |
-| `copr-build.yml` | Release | Auto-build in COPR |
+| `copr-build.yml` | Release | Auto-build in COPR (SCM build from the GitHub tag) |
 | `release.yml` | Tag push | Create GitHub release |
 
 **To create a new release:**
@@ -597,8 +639,7 @@ This automatically:
 1. Runs CI tests
 2. Builds the package
 3. Creates GitHub release
-4. Triggers COPR build
-5. Publishes to PyPI
+4. Triggers the COPR build — built straight from the GitHub tag, so no PyPI upload is needed
 
 ## 📞 Support
 

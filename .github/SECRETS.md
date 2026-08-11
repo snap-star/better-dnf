@@ -7,7 +7,8 @@ This document explains how to configure the required secrets for GitHub Actions 
 | Secret | Purpose | Where to get it |
 |--------|---------|-----------------|
 | `COPR_CONFIG` | COPR CLI authentication | Fedora COPR API page |
-| `PYPI_API_TOKEN` | PyPI publishing | PyPI account settings |
+
+> 💡 No PyPI token is needed: the COPR workflow builds from the GitHub release tag (SCM build), so `COPR_CONFIG` is the only required secret.
 
 ---
 
@@ -46,33 +47,6 @@ login = snap-star
 
 ---
 
-## 🔧 Setting up PYPI_API_TOKEN
-
-### Step 1: Create PyPI Account
-
-1. Go to [pypi.org](https://pypi.org/)
-2. Create an account
-
-### Step 2: Generate API Token
-
-1. Go to [pypi.org/manage/account/token/](https://pypi.org/manage/account/token/)
-2. Click **Add API token**
-3. Name: `github-actions`
-4. Scope: `Entire account (all projects)`
-5. Click **Add token**
-6. Copy the token (starts with `pypi-`)
-
-### Step 3: Add to GitHub Secrets
-
-1. Go to your GitHub repository: `https://github.com/snap-star/better-dnf`
-2. Click **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `PYPI_API_TOKEN`
-5. Value: Paste your PyPI token
-6. Click **Add secret**
-
----
-
 ## 🚀 Creating a Release
 
 Once secrets are configured, creating a release is simple:
@@ -95,8 +69,7 @@ This will automatically:
 1. ✅ Run CI tests
 2. ✅ Build the package
 3. ✅ Create GitHub release
-4. ✅ Trigger COPR build
-5. ✅ Publish to PyPI
+4. ✅ Trigger the COPR build — built straight from the GitHub tag, so no PyPI upload is needed
 
 ---
 
@@ -111,11 +84,6 @@ This will automatically:
 
 1. Go to [GitHub Releases](https://github.com/snap-star/better-dnf/releases)
 2. You should see the new release with attached artifacts
-
-### Check PyPI
-
-1. Go to [PyPI package](https://pypi.org/project/better-dnf/)
-2. You should see the new version
 
 ---
 

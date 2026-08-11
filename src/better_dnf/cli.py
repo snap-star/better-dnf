@@ -543,12 +543,40 @@ def security(
 def snapshot(
     action: str = typer.Argument(help="""Action to perform:
 
-  create   - Create a new pre-update snapshot
+  create   - Create a new snapshot (default: pre; use 'post' after updates)
   list     - List all available snapshots
   rollback - Rollback to a specific snapshot (requires snapshot-id)"""),
     snapshot_id: str | None = typer.Argument(
         None,
-        help="Snapshot ID for rollback (required for 'rollback' action)",
+        help="""Snapshot ID for rollback, or snapshot type for 'create'
+(pre, post, single). Default type is 'pre'.""",
+    ),
+    snapshot_type: str | None = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="""Snapshot type for 'create' (overrides positional type).
+
+TYPES:
+  pre    BEFORE an update (system state before changes)
+  post   AFTER an update (system state after changes)
+  single Standalone snapshot (timeline/manual)""",
+    ),
+    pre_number: str | None = typer.Option(
+        None,
+        "--pre-number",
+        help="""Pre snapshot number to pair a 'post' snapshot with.
+
+Defaults to the most recent 'pre' snapshot. Useful when you want to
+complete a specific pre/post pair (e.g. --pre-number 307).
+
+Example: better-dnf snapshot create post --pre-number 307""",
+    ),
+    description: str | None = typer.Option(
+        None,
+        "--description",
+        "-d",
+        help="Optional description for the new snapshot",
     ),
 ) -> None:
     """
@@ -569,11 +597,18 @@ def snapshot(
     2. Apply update
     3. 'post' snapshot = System state AFTER update
 
-    This gives you complete before/after comparison.
+    This gives you complete before/after comparison. Better-dnf
+    creates the 'post' snapshot automatically after a successful
+    update, and 'post' snapshots are linked to their 'pre' pair
+    (snapper requires --pre-number for post snapshots).
 
     💡 COMMON COMMANDS:
     ─────────────────────────────────────────────────
     better-dnf snapshot create              # Create new pre-update snapshot
+    better-dnf snapshot create post         # Post-update snapshot (pairs with latest pre)
+    better-dnf snapshot create post --pre-number 307   # Pair with a specific pre
+    better-dnf snapshot create single       # Standalone snapshot
+    better-dnf snapshot create --type post --description "after kernel"
     better-dnf snapshot list                # View all available snapshots
     better-dnf snapshot rollback <id>       # Restore to specific snapshot
     ─────────────────────────────────────────────────
@@ -586,18 +621,46 @@ def snapshot(
 
     🔧 SNAPPER vs BETTER-DNF:
     • Better-dnf creates 'pre' snapshots before updates
-    • Snapper creates 'post' snapshots after updates
-    • Both work together for complete protection
+    • Better-dnf creates 'post' snapshots after successful updates
+    • 'single' snapshots are created by snapper timeline/manual
 
     Examples:
-      better-dnf snapshot create           # Create new snapshot
-      better-dnf snapshot list             # List all snapshots
-      better-dnf snapshot rollback 307     # Rollback to snapshot #307
+      better-dnf snapshot create                # Create new 'pre' snapshot
+      better-dnf snapshot create post           # Create 'post' snapshot
+      better-dnf snapshot create post --pre-number 307   # Pair with pre #307
+      better-dnf snapshot create -t single      # Create standalone snapshot
+      better-dnf snapshot list                  # List all snapshots
+      better-dnf snapshot rollback 307          # Rollback to snapshot #307
     """
     try:
         if action == "create":
+            # Resolve the snapshot type: --type flag wins, then the
+            # positional (snapshot_id), then the default 'pre'.
+            if snapshot_type is not None:
+                snap_type = snapshot_type
+            elif snapshot_id in ("pre", "post", "single"):
+                snap_type = snapshot_id
+            elif snapshot_id is not None:
+                snap_type = snapshot_id  # e.g. 'snapshot create bogus' -> error below
+            else:
+                snap_type = "pre"
+
+            if snap_type not in ("pre", "post", "single"):
+                console.print(f"[red]Invalid snapshot type: {snap_type}[/red]")
+                console.print("[dim]Valid types: pre, post, single[/dim]")
+                return
+
             console.print("[bold cyan]📸 Creating Snapshot[/bold cyan]\n")
-            success, _snap_id, message = SnapshotManager.create_snapshot()
+            if snap_type == "post":
+                success, _snap_id, message = SnapshotManager.create_post_snapshot(
+                    description=description,
+                    pre_number=pre_number,
+                )
+            else:
+                success, _snap_id, message = SnapshotManager.create_snapshot(
+                    description=description,
+                    snapshot_type=snap_type,
+                )
             if success:
                 console.print(f"[green]✓ {message}[/green]")
             else:
