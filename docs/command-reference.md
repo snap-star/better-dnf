@@ -91,7 +91,6 @@ better-dnf list-updates -i critical
 |--------|-------|---------|-------------|
 | `--category <name>` | `-c` | — | Filter by update category |
 | `--importance <level>` | `-i` | — | Filter by importance level |
-| `--all` | `-a` | `false` | Show all updates without filtering |
 
 ### Category values for `-c`
 
@@ -125,7 +124,6 @@ better-dnf list-updates -c driver           # driver updates only
 better-dnf list-updates -c user_app         # user applications only
 better-dnf list-updates -i critical         # critical updates only
 better-dnf list-updates -c security -i high # security + high importance
-better-dnf list-updates --all               # everything at once
 ```
 
 ---

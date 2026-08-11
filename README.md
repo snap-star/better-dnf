@@ -194,9 +194,6 @@ better-dnf list-updates --importance high
 
 # Combine filters
 better-dnf list-updates --category security --importance critical
-
-# Show all without filtering
-better-dnf list-updates --all
 ```
 
 ### Security Updates
@@ -583,6 +580,7 @@ better-dnf/
 │   └── workflows/
 │       ├── ci.yml           # CI/CD pipeline
 │       ├── copr-build.yml   # COPR auto-build (SCM from GitHub tag)
+│       ├── docs.yml         # Build & deploy docs to GitHub Pages
 │       └── release.yml      # Release automation
 ├── src/
 │   └── better_dnf/
@@ -628,6 +626,7 @@ This project uses GitHub Actions for:
 | `ci.yml` | Push/PR | Tests, linting, type checking |
 | `copr-build.yml` | Release | Auto-build in COPR (SCM build from the GitHub tag) |
 | `release.yml` | Tag push | Create GitHub release |
+| `docs.yml` | Push to `main` | Build & deploy docs to GitHub Pages |
 
 **To create a new release:**
 ```bash

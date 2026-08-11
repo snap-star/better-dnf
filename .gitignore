@@ -72,3 +72,6 @@ mock-results/
 *.whl
 *.tar.gz
 *.zip
+
+# MkDocs output
+site/

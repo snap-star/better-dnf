@@ -1,0 +1,72 @@
+# GitHub Actions Workflow: Build and Deploy MkDocs Site to GitHub Pages
+# Builds the documentation site on every push to main (and on demand),
+# then deploys the generated site/ directory to GitHub Pages.
+# Pull requests touching the docs also run the build (strict) so broken
+# links or config errors are caught before they reach main.
+
+name: Deploy Docs to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install mkdocs
+        run: |
+          python -m pip install --upgrade pip
+          # Pinned: --strict fails on any warning, and unpinned deps could
+          # introduce new warnings that break CI for no reason.
+          pip install mkdocs==1.6.1 mkdocs-material==9.7.7
+
+      - name: Build documentation (strict)
+        # --strict fails the build on any warning (e.g. broken links),
+        # so docs errors surface in CI before they reach the deployed site.
+        run: mkdocs build --strict
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    # Only deploy on push to main; pull requests just run the build check.
+    if: github.event_name == 'push'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **GitHub Pages documentation site** - New `docs/` MkDocs site (index, user guide, command reference) built with `mkdocs build --strict` and deployed to GitHub Pages by the `docs.yml` workflow on every push to `main`.
+
 ### 🐛 Fixed
 
 - **`apply updates` keeps the controlling terminal for sudo** - The `dnf upgrade` child was spawned with `start_new_session=True` (setsid), which detaches from the controlling terminal. Fedora's sudo enables `tty_tickets` by default, keying its credential cache to the controlling terminal, so the detached child couldn't see the credentials just cached by `sudo -n -v` and failed with "a terminal is required to read the password". The child now runs in its own process group via `preexec_fn=os.setpgrp` (Ctrl+C `killpg` cleanup still works) while keeping the terminal.
@@ -17,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🧹 Removed
 
+- **Unused `--all` flag on `list-updates`** - The option was accepted but had no code effect (listing everything is already the default behavior when no filters are given).
 - **Unused `requests` and `pyyaml` dependencies** - Neither is imported anywhere in the codebase; both were declared ahead of planned features (config file support, advisory enrichment). Re-add them when those features land.
 
 ### 🧪 Testing

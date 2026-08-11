@@ -342,12 +342,6 @@ LEVELS:
 💡 TIP: Combine with -c for focused updates
 Example: better-dnf list-updates -c security -i critical""",
     ),
-    all: bool = typer.Option(
-        False,
-        "--all",
-        "-a",
-        help="Show all updates without filtering",
-    ),
 ) -> None:
     """
     📋 List available updates with optional filtering.
@@ -379,7 +373,6 @@ Example: better-dnf list-updates -c security -i critical""",
 
     💡 TIPS:
     • Combine filters: -c security -i critical
-    • Use --all to see everything at once
     • Run without filters to see grouped categories
 
     Examples:
