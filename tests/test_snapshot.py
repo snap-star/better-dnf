@@ -77,15 +77,16 @@ class TestCreateSnapshot:
         assert "not btrfs" in msg
 
     def test_uses_snapper_when_available(self):
-        with patch.object(SnapshotManager, "is_btrfs_root", return_value=True):
-            with patch.object(
-                SnapshotManager, "is_snapper_installed", return_value=True
-            ):
-                with patch.object(
-                    SnapshotManager, "_create_snapper_snapshot",
-                    return_value=(True, "42", "ok"),
-                ) as mock_snapper:
-                    ok, snap_id, msg = SnapshotManager.create_snapshot()
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "42", "ok"),
+            ) as mock_snapper,
+        ):
+            ok, snap_id, _msg = SnapshotManager.create_snapshot()
 
         assert ok is True
         assert snap_id == "42"
@@ -94,32 +95,32 @@ class TestCreateSnapshot:
         assert args[2] == "pre"
 
     def test_falls_back_to_btrfs(self):
-        with patch.object(SnapshotManager, "is_btrfs_root", return_value=True):
-            with patch.object(
-                SnapshotManager, "is_snapper_installed", return_value=False
-            ):
-                with patch.object(
-                    SnapshotManager, "_create_btrfs_snapshot",
-                    return_value=(True, "snap", "ok"),
-                ) as mock_btrfs:
-                    ok, snap_id, msg = SnapshotManager.create_snapshot()
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=False),
+            patch.object(
+                SnapshotManager,
+                "_create_btrfs_snapshot",
+                return_value=(True, "snap", "ok"),
+            ) as mock_btrfs,
+        ):
+            ok, snap_id, _msg = SnapshotManager.create_snapshot()
 
         assert ok is True
         assert snap_id == "snap"
         mock_btrfs.assert_called_once()
 
     def test_description_appended_to_name(self):
-        with patch.object(SnapshotManager, "is_btrfs_root", return_value=True):
-            with patch.object(
-                SnapshotManager, "is_snapper_installed", return_value=True
-            ):
-                with patch.object(
-                    SnapshotManager, "_create_snapper_snapshot",
-                    return_value=(True, "42", "ok"),
-                ) as mock_snapper:
-                    SnapshotManager.create_snapshot(
-                        description="before updates"
-                    )
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "42", "ok"),
+            ) as mock_snapper,
+        ):
+            SnapshotManager.create_snapshot(description="before updates")
 
         snapshot_name = mock_snapper.call_args.args[0]
         assert snapshot_name.startswith("better-dnf-")
@@ -130,15 +131,16 @@ class TestCreatePostSnapshot:
     """Tests for create_post_snapshot."""
 
     def test_uses_pre_type_and_post_prefix(self):
-        with patch.object(SnapshotManager, "is_btrfs_root", return_value=True):
-            with patch.object(
-                SnapshotManager, "is_snapper_installed", return_value=True
-            ):
-                with patch.object(
-                    SnapshotManager, "_create_snapper_snapshot",
-                    return_value=(True, "43", "ok"),
-                ) as mock_snapper:
-                    ok, snap_id, msg = SnapshotManager.create_post_snapshot()
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "43", "ok"),
+            ) as mock_snapper,
+        ):
+            ok, snap_id, _msg = SnapshotManager.create_post_snapshot()
 
         assert ok is True
         assert snap_id == "43"
@@ -148,7 +150,7 @@ class TestCreatePostSnapshot:
 
     def test_non_btrfs_returns_failure(self):
         with patch.object(SnapshotManager, "is_btrfs_root", return_value=False):
-            ok, snap_id, msg = SnapshotManager.create_post_snapshot()
+            ok, _snap_id, msg = SnapshotManager.create_post_snapshot()
 
         assert ok is False
         assert "not btrfs" in msg
@@ -162,11 +164,14 @@ class TestCreateSnapperSnapshot:
         # returns the CSV from which the latest snapshot number is extracted.
         calls = [
             _cp(0, stdout=""),
-            _cp(0, stdout=(
-                "Number,Date,Description,Type\n"
-                "0,date,current,single\n"
-                "42,date,my-snap,single\n"
-            )),
+            _cp(
+                0,
+                stdout=(
+                    "Number,Date,Description,Type\n"
+                    "0,date,current,single\n"
+                    "42,date,my-snap,single\n"
+                ),
+            ),
         ]
 
         def fake_run_sudo(cmd, **kwargs):
@@ -200,7 +205,7 @@ class TestCreateSnapperSnapshot:
             "better_dnf.snapshot.run_sudo",
             return_value=_cp(1, stderr="permission denied"),
         ):
-            ok, snap_id, msg = SnapshotManager._create_snapper_snapshot(
+            ok, _snap_id, msg = SnapshotManager._create_snapper_snapshot(
                 "better-dnf-20260811", None, "pre"
             )
 
@@ -212,7 +217,7 @@ class TestCreateSnapperSnapshot:
             "better_dnf.snapshot.run_sudo",
             side_effect=subprocess.TimeoutExpired("snapper", 30),
         ):
-            ok, snap_id, msg = SnapshotManager._create_snapper_snapshot(
+            ok, _snap_id, msg = SnapshotManager._create_snapper_snapshot(
                 "better-dnf-20260811", None, "pre"
             )
 
@@ -247,7 +252,7 @@ class TestCreateBtrfsSnapshot:
             return _cp(0)
 
         with patch("better_dnf.snapshot.run_sudo", side_effect=fake_run_sudo):
-            ok, snap_id, msg = SnapshotManager._create_btrfs_snapshot(
+            ok, _snap_id, msg = SnapshotManager._create_btrfs_snapshot(
                 "better-dnf-20260811", None
             )
 
@@ -261,7 +266,7 @@ class TestCreateBtrfsSnapshot:
             return _cp(0)
 
         with patch("better_dnf.snapshot.run_sudo", side_effect=fake_run_sudo):
-            ok, snap_id, msg = SnapshotManager._create_btrfs_snapshot(
+            ok, _snap_id, msg = SnapshotManager._create_btrfs_snapshot(
                 "better-dnf-20260811", None
             )
 
@@ -273,7 +278,7 @@ class TestCreateBtrfsSnapshot:
             "better_dnf.snapshot.run_sudo",
             side_effect=subprocess.TimeoutExpired("btrfs", 60),
         ):
-            ok, snap_id, msg = SnapshotManager._create_btrfs_snapshot(
+            ok, _snap_id, msg = SnapshotManager._create_btrfs_snapshot(
                 "better-dnf-20260811", None
             )
 
@@ -285,34 +290,32 @@ class TestListSnapshots:
     """Tests for listing snapshots."""
 
     def test_dispatch_to_snapper(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=True
-        ):
-            with patch.object(
-                SnapshotManager, "_list_snapper_snapshots",
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
                 return_value=[{"id": "42"}],
-            ) as mock_snapper:
-                with patch.object(
-                    SnapshotManager, "_list_btrfs_snapshots"
-                ) as mock_btrfs:
-                    result = SnapshotManager.list_snapshots()
+            ) as mock_snapper,
+            patch.object(SnapshotManager, "_list_btrfs_snapshots") as mock_btrfs,
+        ):
+            result = SnapshotManager.list_snapshots()
 
         assert result == [{"id": "42"}]
         mock_snapper.assert_called_once()
         mock_btrfs.assert_not_called()
 
     def test_dispatch_to_btrfs(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=False
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=False),
+            patch.object(SnapshotManager, "_list_snapper_snapshots") as mock_snapper,
+            patch.object(
+                SnapshotManager,
+                "_list_btrfs_snapshots",
+                return_value=[{"id": "7"}],
+            ) as mock_btrfs,
         ):
-            with patch.object(
-                SnapshotManager, "_list_snapper_snapshots"
-            ) as mock_snapper:
-                with patch.object(
-                    SnapshotManager, "_list_btrfs_snapshots",
-                    return_value=[{"id": "7"}],
-                ) as mock_btrfs:
-                    result = SnapshotManager.list_snapshots()
+            result = SnapshotManager.list_snapshots()
 
         assert result == [{"id": "7"}]
         mock_snapper.assert_not_called()
@@ -322,12 +325,10 @@ class TestListSnapshots:
         csv = (
             "Number,Date,Description,Type\n"
             "0,date,current,single\n"
-            "42,\"2026-08-11 10:00:00\",\"my snapshot\",single\n"
+            '42,"2026-08-11 10:00:00","my snapshot",single\n'
             "not-a-number,date,x,single\n"
         )
-        with patch(
-            "better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=csv)
-        ):
+        with patch("better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=csv)):
             result = SnapshotManager._list_snapper_snapshots()
 
         ids = [s["id"] for s in result]
@@ -364,9 +365,7 @@ class TestListSnapshots:
             "ID 257 gen 12 top level 5 path <FS_TREE>/.snapshots\n"
             "ID 258 gen 13 top level 5 path <FS_TREE>/.snapshots/better-dnf-20260811\n"
         )
-        with patch(
-            "better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=output)
-        ):
+        with patch("better_dnf.snapshot.run_sudo", return_value=_cp(0, stdout=output)):
             result = SnapshotManager._list_btrfs_snapshots()
 
         assert len(result) == 2
@@ -388,66 +387,69 @@ class TestRollback:
     """Tests for the rollback flow."""
 
     def test_snapshot_not_found(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=True
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(SnapshotManager, "_list_snapper_snapshots", return_value=[]),
         ):
-            with patch.object(
-                SnapshotManager, "_list_snapper_snapshots", return_value=[]
-            ):
-                ok, msg = SnapshotManager.rollback_snapshot("999")
+            ok, msg = SnapshotManager.rollback_snapshot("999")
 
         assert ok is False
         assert "999 not found" in msg
 
     def test_user_cancels_rollback(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=True
-        ):
-            with patch.object(
-                SnapshotManager, "_list_snapper_snapshots",
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
                 return_value=[{"id": "42"}],
-            ):
-                with patch("questionary.confirm") as mock_confirm:
-                    mock_confirm.return_value.ask.return_value = False
-                    ok, msg = SnapshotManager.rollback_snapshot("42")
+            ),
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            mock_confirm.return_value.ask.return_value = False
+            ok, msg = SnapshotManager.rollback_snapshot("42")
 
         assert ok is False
         assert "Rollback cancelled" in msg
 
     def test_snapper_rollback_success(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=True
-        ):
-            with patch.object(
-                SnapshotManager, "_list_snapper_snapshots",
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
                 return_value=[{"id": "42"}],
-            ):
-                with patch("questionary.confirm") as mock_confirm:
-                    mock_confirm.return_value.ask.return_value = True
-                    with patch.object(
-                        SnapshotManager, "_rollback_snapper",
-                        return_value=(True, "Rolled back"),
-                    ) as mock_rollback:
-                        ok, msg = SnapshotManager.rollback_snapshot("42")
+            ),
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            mock_confirm.return_value.ask.return_value = True
+            with patch.object(
+                SnapshotManager,
+                "_rollback_snapper",
+                return_value=(True, "Rolled back"),
+            ) as mock_rollback:
+                ok, _msg = SnapshotManager.rollback_snapshot("42")
 
         assert ok is True
         mock_rollback.assert_called_once_with("42")
 
     def test_btrfs_rollback_success(self):
-        with patch.object(
-            SnapshotManager, "is_snapper_installed", return_value=False
-        ):
-            with patch.object(
-                SnapshotManager, "_list_btrfs_snapshots",
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=False),
+            patch.object(
+                SnapshotManager,
+                "_list_btrfs_snapshots",
                 return_value=[{"id": "7"}],
-            ):
-                with patch("questionary.confirm") as mock_confirm:
-                    mock_confirm.return_value.ask.return_value = True
-                    with patch.object(
-                        SnapshotManager, "_rollback_btrfs",
-                        return_value=(True, "Rolled back"),
-                    ) as mock_rollback:
-                        ok, msg = SnapshotManager.rollback_snapshot("7")
+            ),
+            patch("questionary.confirm") as mock_confirm,
+        ):
+            mock_confirm.return_value.ask.return_value = True
+            with patch.object(
+                SnapshotManager,
+                "_rollback_btrfs",
+                return_value=(True, "Rolled back"),
+            ) as mock_rollback:
+                ok, _msg = SnapshotManager.rollback_snapshot("7")
 
         assert ok is True
         mock_rollback.assert_called_once_with("7")
@@ -479,14 +481,14 @@ class TestDisplaySnapshots:
     def test_empty_shows_message(self):
         printed = []
 
-        with patch.object(
-            SnapshotManager, "list_snapshots", return_value=[]
-        ):
-            with patch(
+        with (
+            patch.object(SnapshotManager, "list_snapshots", return_value=[]),
+            patch(
                 "better_dnf.snapshot.console.print",
                 side_effect=lambda *a, **k: printed.append(a),
-            ):
-                SnapshotManager.display_snapshots()
+            ),
+        ):
+            SnapshotManager.display_snapshots()
 
         text = " ".join(str(a[0]) for a in printed)
         assert "No snapshots found" in text
@@ -494,16 +496,27 @@ class TestDisplaySnapshots:
     def test_with_snapshots_builds_table(self):
         printed = []
 
-        with patch.object(
-            SnapshotManager, "list_snapshots",
-            return_value=[{"id": "42", "date": "today", "description": "pre", "type": "single"}],
-        ):
-            with patch(
+        with (
+            patch.object(
+                SnapshotManager,
+                "list_snapshots",
+                return_value=[
+                    {
+                        "id": "42",
+                        "date": "today",
+                        "description": "pre",
+                        "type": "single",
+                    }
+                ],
+            ),
+            patch(
                 "better_dnf.snapshot.console.print",
                 side_effect=lambda *a, **k: printed.append(a),
-            ):
-                SnapshotManager.display_snapshots()
+            ),
+        ):
+            SnapshotManager.display_snapshots()
 
         # A Table was rendered (the only non-string arg)
         from rich.table import Table
+
         assert any(isinstance(a[0], Table) for a in printed if a)

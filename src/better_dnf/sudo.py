@@ -8,9 +8,10 @@ with a masked password prompt and feed the password back via stdin using
 'sudo -S', so no terminal is ever required.
 """
 
+from __future__ import annotations
+
 import os
 import subprocess
-from typing import List, Optional, Tuple
 
 from rich.console import Console
 
@@ -21,8 +22,8 @@ _MAX_PASSWORD_ATTEMPTS = 3
 
 
 def ensure_sudo_credentials(
-    probe_args: Optional[List[str]] = None,
-) -> Tuple[bool, Optional[str]]:
+    probe_args: list[str] | None = None,
+) -> tuple[bool, str | None]:
     """
     Ensure sudo can run without requiring an interactive terminal.
 
@@ -61,6 +62,7 @@ def ensure_sudo_credentials(
             capture_output=True,
             text=True,
             timeout=10,
+            check=False,  # We inspect returncode manually
         )
         if check.returncode == 0:
             return (True, None)  # Already authenticated / NOPASSWD
@@ -69,6 +71,7 @@ def ensure_sudo_credentials(
 
     # Prompt for the password (masked input) with retries
     from questionary import password
+
     console.print("[yellow]🔑 Sudo authentication required.[/yellow]")
     for attempt in range(_MAX_PASSWORD_ATTEMPTS):
         pwd = password("Enter your sudo password:").ask()
@@ -83,6 +86,7 @@ def ensure_sudo_credentials(
                 capture_output=True,
                 text=True,
                 timeout=10,
+                check=False,  # We inspect returncode manually
             )
         except (subprocess.TimeoutExpired, FileNotFoundError):
             console.print("[red]✗ Unable to validate sudo credentials.[/red]")
@@ -103,8 +107,8 @@ def ensure_sudo_credentials(
 
 
 def run_sudo(
-    args: List[str],
-    timeout: Optional[float] = None,
+    args: list[str],
+    timeout: float | None = None,
     text: bool = True,
 ) -> subprocess.CompletedProcess:
     """
@@ -135,4 +139,5 @@ def run_sudo(
         capture_output=True,
         text=text,
         timeout=timeout,
+        check=False,  # We inspect returncode manually
     )

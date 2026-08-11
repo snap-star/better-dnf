@@ -11,14 +11,14 @@ This tool helps Fedora users safely manage system updates by:
 __version__ = "1.0.0"
 __author__ = "snap-star"
 
-from better_dnf.models import PackageUpdate, UpdateCategory, UpdateImportance
 from better_dnf.analyzer import UpdateAnalyzer
+from better_dnf.models import PackageUpdate, UpdateCategory, UpdateImportance
 from better_dnf.selector import UpdateSelector
 
 __all__ = [
     "PackageUpdate",
-    "UpdateCategory", 
-    "UpdateImportance",
     "UpdateAnalyzer",
+    "UpdateCategory",
+    "UpdateImportance",
     "UpdateSelector",
 ]

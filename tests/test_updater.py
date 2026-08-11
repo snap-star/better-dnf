@@ -83,15 +83,15 @@ class TestApplyUpdatesEarlyReturns:
         """Sudo authentication failure -> cancelled, no snapshot/Popen."""
         plan = _make_plan()
 
-        with patch(
-            "better_dnf.updater.ensure_sudo_credentials",
-            return_value=(False, None),
+        with (
+            patch(
+                "better_dnf.updater.ensure_sudo_credentials",
+                return_value=(False, None),
+            ),
+            patch("better_dnf.updater.SnapshotManager.create_snapshot") as snap,
+            patch("better_dnf.updater.subprocess.Popen") as popen,
         ):
-            with patch(
-                "better_dnf.updater.SnapshotManager.create_snapshot"
-            ) as snap:
-                with patch("better_dnf.updater.subprocess.Popen") as popen:
-                    ok, msg = UpdateApplier.apply_updates(plan)
+            ok, msg = UpdateApplier.apply_updates(plan)
 
         assert ok is False
         assert "cancelled" in msg
@@ -102,9 +102,11 @@ class TestApplyUpdatesEarlyReturns:
         """Dry run builds 'dnf upgrade --assumeno' and never touches sudo."""
         plan = _make_plan(names=("kernel", "firefox"))
 
-        with patch("better_dnf.updater.subprocess.Popen") as popen:
-            with patch("better_dnf.updater.ensure_sudo_credentials") as sudo:
-                ok, msg = UpdateApplier.apply_updates(plan, dry_run=True)
+        with (
+            patch("better_dnf.updater.subprocess.Popen") as popen,
+            patch("better_dnf.updater.ensure_sudo_credentials") as sudo,
+        ):
+            ok, msg = UpdateApplier.apply_updates(plan, dry_run=True)
 
         assert ok is True
         assert "Dry run" in msg
@@ -120,18 +122,16 @@ class TestApplyUpdatesSudoFlow:
         plan = _make_plan()
         proc = _make_process(returncode=0, lines=["Complete!"])
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ) as popen:
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc) as popen,
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
-            ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    ok, msg = UpdateApplier.apply_updates(
-                        plan, create_snapshot=False
-                    )
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is True
         cmd = popen.call_args.args[0]
@@ -147,18 +147,16 @@ class TestApplyUpdatesSudoFlow:
             lines=["Downloading packages...", "Complete!"],
         )
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ) as popen:
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc) as popen,
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, "secret"),
-            ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    ok, msg = UpdateApplier.apply_updates(
-                        plan, create_snapshot=False
-                    )
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is True
         cmd = popen.call_args.args[0]
@@ -172,16 +170,16 @@ class TestApplyUpdatesSudoFlow:
         """User declines the final confirmation -> cancelled, no Popen."""
         plan = _make_plan()
 
-        with patch("better_dnf.updater.subprocess.Popen") as popen:
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen") as popen,
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
-            ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = False
-                    ok, msg = UpdateApplier.apply_updates(
-                        plan, create_snapshot=False
-                    )
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = False
+            ok, msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is False
         assert "cancelled" in msg
@@ -200,22 +198,20 @@ class TestApplyUpdatesSudoFlow:
         )
         printed = []
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, "secret"),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            with patch(
+                "better_dnf.updater.console.print",
+                side_effect=printed.append,
             ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    with patch(
-                        "better_dnf.updater.console.print",
-                        side_effect=printed.append,
-                    ):
-                        ok, msg = UpdateApplier.apply_updates(
-                            plan, create_snapshot=False
-                        )
+                ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is True
         printed_text = " ".join(str(p) for p in printed).lower()
@@ -231,18 +227,16 @@ class TestApplyUpdatesOutcome:
         plan = _make_plan()
         proc = _make_process(returncode=0, lines=["Complete!"])
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
-            ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    ok, msg = UpdateApplier.apply_updates(
-                        plan, create_snapshot=False
-                    )
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            ok, msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is True
         assert msg == "Updates applied successfully"
@@ -252,18 +246,16 @@ class TestApplyUpdatesOutcome:
         plan = _make_plan()
         proc = _make_process(returncode=1, lines=["Error: something"])
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
-            ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    ok, msg = UpdateApplier.apply_updates(
-                        plan, create_snapshot=False
-                    )
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            ok, msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is False
         assert msg == "Update failed"
@@ -278,24 +270,20 @@ class TestApplyUpdatesInterrupts:
         proc = _make_process(raise_on_readline=KeyboardInterrupt)
         proc.poll.return_value = None  # still running
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            with (
+                patch("better_dnf.updater.os.getpgid", return_value=555) as getpgid,
+                patch("better_dnf.updater.os.killpg") as killpg,
             ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    with patch(
-                        "better_dnf.updater.os.getpgid", return_value=555
-                    ) as getpgid:
-                        with patch(
-                            "better_dnf.updater.os.killpg"
-                        ) as killpg:
-                            ok, msg = UpdateApplier.apply_updates(
-                                plan, create_snapshot=False
-                            )
+                ok, msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is False
         assert "cancelled" in msg
@@ -306,29 +294,23 @@ class TestApplyUpdatesInterrupts:
         """Timeout during output -> SIGKILL the process group, timed out."""
         plan = _make_plan()
         proc = _make_process(
-            raise_on_readline=subprocess.TimeoutExpired(
-                cmd="dnf", timeout=30
-            )
+            raise_on_readline=subprocess.TimeoutExpired(cmd="dnf", timeout=30)
         )
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            with (
+                patch("better_dnf.updater.os.getpgid", return_value=555),
+                patch("better_dnf.updater.os.killpg") as killpg,
             ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    with patch(
-                        "better_dnf.updater.os.getpgid", return_value=555
-                    ):
-                        with patch(
-                            "better_dnf.updater.os.killpg"
-                        ) as killpg:
-                            ok, msg = UpdateApplier.apply_updates(
-                                plan, create_snapshot=False
-                            )
+                ok, msg = UpdateApplier.apply_updates(plan, create_snapshot=False)
 
         assert ok is False
         assert "timed out" in msg
@@ -343,26 +325,26 @@ class TestApplyUpdatesSnapshots:
         plan = _make_plan()
         proc = _make_process(returncode=0, lines=["Complete!"])
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            with (
+                patch(
+                    "better_dnf.updater.SnapshotManager.create_snapshot",
+                    return_value=(True, "42", "Snapshot created"),
+                ) as snap,
+                patch(
+                    "better_dnf.updater.SnapshotManager.create_post_snapshot",
+                    return_value=(True, "43", "Post created"),
+                ) as post,
             ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    with patch(
-                        "better_dnf.updater.SnapshotManager.create_snapshot",
-                        return_value=(True, "42", "Snapshot created"),
-                    ) as snap:
-                        with patch(
-                            "better_dnf.updater.SnapshotManager.create_post_snapshot",
-                            return_value=(True, "43", "Post created"),
-                        ) as post:
-                            ok, msg = UpdateApplier.apply_updates(
-                                plan, create_snapshot=True
-                            )
+                ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=True)
 
         assert ok is True
         assert plan.snapshot_id == "42"
@@ -374,25 +356,25 @@ class TestApplyUpdatesSnapshots:
         plan = _make_plan()
         proc = _make_process(returncode=0, lines=["Complete!"])
 
-        with patch(
-            "better_dnf.updater.subprocess.Popen", return_value=proc
-        ):
-            with patch(
+        with (
+            patch("better_dnf.updater.subprocess.Popen", return_value=proc),
+            patch(
                 "better_dnf.updater.ensure_sudo_credentials",
                 return_value=(True, None),
+            ),
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = True
+            with (
+                patch(
+                    "better_dnf.updater.SnapshotManager.create_snapshot",
+                    return_value=(False, None, "No btrfs root"),
+                ),
+                patch(
+                    "better_dnf.updater.SnapshotManager.create_post_snapshot"
+                ) as post,
             ):
-                with patch("questionary.confirm") as confirm:
-                    confirm.return_value.ask.return_value = True
-                    with patch(
-                        "better_dnf.updater.SnapshotManager.create_snapshot",
-                        return_value=(False, None, "No btrfs root"),
-                    ):
-                        with patch(
-                            "better_dnf.updater.SnapshotManager.create_post_snapshot"
-                        ) as post:
-                            ok, msg = UpdateApplier.apply_updates(
-                                plan, create_snapshot=True
-                            )
+                ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=True)
 
         assert ok is True
         assert plan.snapshot_id is None

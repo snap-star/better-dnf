@@ -11,7 +11,7 @@ patched separately below — they are distinct call sites and patching one does
 not affect the other.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 import questionary
@@ -80,10 +80,7 @@ class TestSelectUpdateStrategy:
             UpdateSelector.select_update_strategy()
 
         choices = mock_select.call_args.kwargs["choices"]
-        values = [
-            c.value for c in choices
-            if isinstance(c, questionary.Choice)
-        ]
+        values = [c.value for c in choices if isinstance(c, questionary.Choice)]
         assert "cancel" in values
 
 
@@ -132,10 +129,7 @@ class TestInteractiveSelectByCategory:
             UpdateSelector.interactive_select_by_category(packages)
 
         choices = mock_select.call_args.kwargs["choices"]
-        values = [
-            c.value for c in choices
-            if isinstance(c, questionary.Choice)
-        ]
+        values = [c.value for c in choices if isinstance(c, questionary.Choice)]
         assert "back" in values
         assert "cancel" in values
 
@@ -146,7 +140,8 @@ class TestInteractiveSelectByCategory:
         with patch("questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = "select_all"
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 return_value=selected,
             ) as mock_individual:
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -160,7 +155,8 @@ class TestInteractiveSelectByCategory:
         with patch("questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = "all"
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 return_value=packages,
             ) as mock_individual:
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -175,7 +171,8 @@ class TestInteractiveSelectByCategory:
         with patch("questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = "select_all"
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 return_value=[],  # user confirmed with nothing selected
             ) as mock_individual:
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -185,7 +182,8 @@ class TestInteractiveSelectByCategory:
 
     def test_category_selection_filters_packages(self):
         kernel = _make_package(
-            "kernel", category=UpdateCategory.KERNEL,
+            "kernel",
+            category=UpdateCategory.KERNEL,
             importance=UpdateImportance.HIGH,
         )
         app = _make_package("firefox")
@@ -195,7 +193,8 @@ class TestInteractiveSelectByCategory:
         with patch("questionary.select") as mock_select:
             mock_select.return_value.ask.return_value = UpdateCategory.KERNEL
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 return_value=selected,
             ) as mock_individual:
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -217,7 +216,8 @@ class TestInteractiveSelectByCategory:
                 "cancel",
             ]
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 return_value=None,  # back to category menu
             ):
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -236,7 +236,8 @@ class TestInteractiveSelectByCategory:
                 UpdateCategory.USER_APP,
             ]
             with patch.object(
-                UpdateSelector, "_select_individual_packages",
+                UpdateSelector,
+                "_select_individual_packages",
                 side_effect=[None, [pkg]],
             ):
                 result = UpdateSelector.interactive_select_by_category(packages)
@@ -298,10 +299,7 @@ class TestSelectIndividualPackages:
             UpdateSelector._select_individual_packages(packages)
 
         choices = mock_checkbox.call_args.kwargs["choices"]
-        values = [
-            c.value for c in choices
-            if isinstance(c, questionary.Choice)
-        ]
+        values = [c.value for c in choices if isinstance(c, questionary.Choice)]
         assert "back" in values
 
 
@@ -328,9 +326,7 @@ class TestConfirmUpdate:
 
     def test_large_plan_shows_warning(self):
         """More than 20 packages triggers the batch-size warning."""
-        plan = UpdatePlan(
-            packages=[_make_package(f"pkg{i}") for i in range(25)]
-        )
+        plan = UpdatePlan(packages=[_make_package(f"pkg{i}") for i in range(25)])
         printed = []
 
         with patch("better_dnf.selector.confirm") as mock_confirm:

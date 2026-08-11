@@ -11,9 +11,9 @@ from typer.testing import CliRunner
 
 from better_dnf.cli import app
 from better_dnf.models import (
+    PackageUpdate,
     UpdateCategory,
     UpdateImportance,
-    PackageUpdate,
     UpdatePlan,
 )
 
@@ -92,11 +92,13 @@ def cli_env():
     def _print(*args, **kwargs):
         printed.append(args)
 
-    with patch("better_dnf.cli.UpdateAnalyzer", return_value=analyzer), \
-         patch("better_dnf.cli.UpdateSelector", selector), \
-         patch("better_dnf.cli.UpdateApplier", applier), \
-         patch("better_dnf.cli.console.print", side_effect=_print), \
-         patch("better_dnf.cli.console.status", return_value=MagicMock()):
+    with (
+        patch("better_dnf.cli.UpdateAnalyzer", return_value=analyzer),
+        patch("better_dnf.cli.UpdateSelector", selector),
+        patch("better_dnf.cli.UpdateApplier", applier),
+        patch("better_dnf.cli.console.print", side_effect=_print),
+        patch("better_dnf.cli.console.status", return_value=MagicMock()),
+    ):
         yield {
             "analyzer": analyzer,
             "selector": selector,
@@ -268,7 +270,8 @@ class TestAnalyzeInteractive:
         pkg = _make_package()
         cli_env["analyzer"].analyze_updates.return_value = [pkg]
         cli_env["selector"].select_update_strategy.side_effect = [
-            "custom", "cancel",
+            "custom",
+            "cancel",
         ]
         cli_env["selector"].interactive_select_by_category.return_value = None
 
@@ -417,9 +420,7 @@ class TestListUpdates:
         assert "Error: boom" in cli_env["text"]()
 
     def test_filter_by_category(self, cli_env):
-        kernel = _make_package(
-            "kernel", category=UpdateCategory.KERNEL, repo="fedora"
-        )
+        kernel = _make_package("kernel", category=UpdateCategory.KERNEL, repo="fedora")
         app_pkg = _make_package("firefox")
         cli_env["analyzer"].analyze_updates.return_value = [kernel, app_pkg]
 
@@ -440,12 +441,8 @@ class TestListUpdates:
         assert "No updates match the specified filters" in cli_env["text"]()
 
     def test_groups_by_category_when_no_filter(self, cli_env):
-        kernel = _make_package(
-            "kernel", category=UpdateCategory.KERNEL, repo="fedora"
-        )
-        app_pkg = _make_package(
-            "firefox", category=UpdateCategory.USER_APP
-        )
+        kernel = _make_package("kernel", category=UpdateCategory.KERNEL, repo="fedora")
+        app_pkg = _make_package("firefox", category=UpdateCategory.USER_APP)
         cli_env["analyzer"].analyze_updates.return_value = [kernel, app_pkg]
 
         result = runner.invoke(app, ["list-updates"])

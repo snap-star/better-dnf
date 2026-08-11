@@ -45,6 +45,7 @@ class TestEnsureSudoCredentials:
 
     def test_nopasswd_probe_for_specific_command(self):
         """Per-command NOPASSWD (e.g. snapper) avoids a password prompt."""
+
         def fake_run(cmd, *args, **kwargs):
             if "snapper" in cmd:
                 return _mock_run(0)  # NOPASSWD rule
@@ -58,9 +59,11 @@ class TestEnsureSudoCredentials:
 
     def test_root_no_sudo_needed(self):
         """Running as root skips all sudo checks."""
-        with patch("better_dnf.sudo.os.geteuid", return_value=0):
-            with patch("better_dnf.sudo.subprocess.run") as mock_run:
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.os.geteuid", return_value=0),
+            patch("better_dnf.sudo.subprocess.run") as mock_run,
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is True
         assert pwd is None
@@ -68,6 +71,7 @@ class TestEnsureSudoCredentials:
 
     def test_password_accepted_after_retries(self):
         """Wrong password repeatedly, correct on the last allowed attempt."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 return _mock_run(1)  # not cached -> prompt
@@ -78,9 +82,11 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.side_effect = wrong + ["good"]
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is True
         assert pwd == "good"
@@ -88,6 +94,7 @@ class TestEnsureSudoCredentials:
 
     def test_max_attempts_fails_gracefully(self):
         """All wrong passwords -> auth fails after max attempts."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 return _mock_run(1)
@@ -96,9 +103,11 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.side_effect = ["x"] * _MAX_PASSWORD_ATTEMPTS
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is False
         assert pwd is None
@@ -106,6 +115,7 @@ class TestEnsureSudoCredentials:
 
     def test_cancel_prompt(self):
         """User cancels the password prompt -> clean abort."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 return _mock_run(1)
@@ -114,9 +124,11 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.return_value = None
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is False
         assert pwd is None
@@ -124,6 +136,7 @@ class TestEnsureSudoCredentials:
 
     def test_probe_timeout_falls_back_to_prompt(self):
         """If the probe times out, still attempt password authentication."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 raise subprocess.TimeoutExpired(cmd=cmd, timeout=10)
@@ -133,15 +146,18 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.return_value = "secret"
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is True
         assert pwd == "secret"
 
     def test_validation_timeout_fails_gracefully(self):
         """If password validation times out, return failure."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 return _mock_run(1)
@@ -150,15 +166,18 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.return_value = "secret"
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is False
         assert pwd is None
 
     def test_sudo_not_installed(self):
         """FileNotFoundError while probing -> falls back to prompt."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 raise FileNotFoundError("sudo not found")
@@ -167,9 +186,11 @@ class TestEnsureSudoCredentials:
         shared = Mock()
         shared.ask.return_value = "secret"
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                ok, pwd = ensure_sudo_credentials()
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            ok, pwd = ensure_sudo_credentials()
 
         assert ok is True
         assert pwd == "secret"
@@ -212,9 +233,11 @@ class TestRunSudo:
         shared = Mock()
         shared.ask.return_value = "secret"
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                result = run_sudo(["dnf", "upgrade", "-y", "kernel"], timeout=30)
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            result = run_sudo(["dnf", "upgrade", "-y", "kernel"], timeout=30)
 
         assert result.returncode == 0
         actual = calls[-1][0]
@@ -223,6 +246,7 @@ class TestRunSudo:
 
     def test_auth_failure_returns_negative_returncode(self):
         """Authentication failure -> returncode -1 with message."""
+
         def fake_run(cmd, *args, **kwargs):
             if "-n" in cmd:
                 return _mock_run(1)
@@ -231,9 +255,11 @@ class TestRunSudo:
         shared = Mock()
         shared.ask.side_effect = ["bad", "bad", "bad"]
 
-        with patch("better_dnf.sudo.subprocess.run", side_effect=fake_run):
-            with patch("questionary.password", return_value=shared):
-                result = run_sudo(["snapper", "list"])
+        with (
+            patch("better_dnf.sudo.subprocess.run", side_effect=fake_run),
+            patch("questionary.password", return_value=shared),
+        ):
+            result = run_sudo(["snapper", "list"])
 
         assert result.returncode == -1
         assert "cancelled" in result.stderr.lower()
