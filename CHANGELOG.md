@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CI type-check (mypy) failures** - Fixed 13 mypy errors across `parser.py`, `analyzer.py`, `selector.py`, `snapshot.py`, `updater.py`, and `cli.py` (untyped `info` dict, `builtins.any` used as a type, `no-any-return` on questionary results, optional `Popen` stdio handles, and `select_update_strategy` now honestly typed as `str | None`). Also bumped the mypy `python_version` config to 3.10 and pinned `mypy<2.0` (mypy 2.x dropped Python 3.9 support, and the CI matrix still runs 3.9), keeping the Python 3.9 runtime floor intact — the type annotations stay 3.9-safe via `from __future__ import annotations`.
 - **CI formatting drift across the Python matrix** - `black` was unpinned, so each matrix job resolved a different version (Python 3.9 got black 25.x, 3.10+ got 26.x) and they disagreed on formatting. The CI workflow now runs ruff/black/mypy once in a dedicated `lint` job (deterministic versions) and keeps the test matrix pytest-only.
+- **Python 3.9 runtime crash on `analyze`/`snapshot` etc.** - typer eagerly resolves command-signature annotations with `get_type_hints()`, and `str | None` (PEP 604) raises `TypeError` when evaluated on Python 3.9. All typer-exposed signatures in `cli.py` now use `Optional[str]`; the Python 3.9 CI job passes again.
 
 ## [1.1.1] - 2026-08-11
 

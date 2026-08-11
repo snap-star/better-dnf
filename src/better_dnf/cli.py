@@ -2,7 +2,11 @@
 Main CLI interface for Better DNF.
 """
 
-from __future__ import annotations
+# NOTE: cli.py intentionally does NOT use `from __future__ import annotations`.
+# typer resolves command signatures at runtime via typing.get_type_hints(), so
+# these annotations must be eagerly evaluable on Python 3.9 - PEP 604 unions
+# (`str | None`) would raise TypeError there, hence Optional[str].
+from typing import Optional
 
 import typer
 from rich import box
@@ -60,7 +64,7 @@ def analyze(
         "-n",
         help="Skip creating a snapshot before updates",
     ),
-    strategy: str | None = typer.Option(
+    strategy: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--strategy",
         "-s",
@@ -311,7 +315,7 @@ Example: better-dnf analyze -s security""",
 
 @app.command("list-updates")
 def list_updates(
-    category: str | None = typer.Option(
+    category: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--category",
         "-c",
@@ -328,7 +332,7 @@ CATEGORIES:
 
 Example: better-dnf list-updates -c kernel""",
     ),
-    importance: str | None = typer.Option(
+    importance: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--importance",
         "-i",
@@ -540,12 +544,12 @@ def snapshot(
   create   - Create a new snapshot (default: pre; use 'post' after updates)
   list     - List all available snapshots
   rollback - Rollback to a specific snapshot (requires snapshot-id)"""),
-    snapshot_id: str | None = typer.Argument(
+    snapshot_id: Optional[str] = typer.Argument(  # noqa: FA100
         None,
         help="""Snapshot ID for rollback, or snapshot type for 'create'
 (pre, post, single). Default type is 'pre'.""",
     ),
-    snapshot_type: str | None = typer.Option(
+    snapshot_type: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--type",
         "-t",
@@ -556,7 +560,7 @@ TYPES:
   post   AFTER an update (system state after changes)
   single Standalone snapshot (timeline/manual)""",
     ),
-    pre_number: str | None = typer.Option(
+    pre_number: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--pre-number",
         help="""Pre snapshot number to pair a 'post' snapshot with.
@@ -566,7 +570,7 @@ complete a specific pre/post pair (e.g. --pre-number 307).
 
 Example: better-dnf snapshot create post --pre-number 307""",
     ),
-    description: str | None = typer.Option(
+    description: Optional[str] = typer.Option(  # noqa: FA100
         None,
         "--description",
         "-d",
