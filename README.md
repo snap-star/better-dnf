@@ -622,10 +622,10 @@ This project uses GitHub Actions for:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `ci.yml` | Push/PR | Tests, linting, type checking |
+| `ci.yml` | Push/PR | Lint, type check, and tests across a Python matrix |
 | `copr-build.yml` | Release | Auto-build in COPR (SCM build from the GitHub tag) |
 | `release.yml` | Tag push | Create GitHub release |
-| `docs.yml` | Push to `main` | Build & deploy docs to GitHub Pages |
+| `docs.yml` | Push to `master` | Build & deploy docs to GitHub Pages |
 
 **To create a new release:**
 ```bash
