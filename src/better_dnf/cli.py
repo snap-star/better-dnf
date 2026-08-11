@@ -19,14 +19,33 @@ from .models import UpdateCategory, UpdateImportance
 # Create CLI app
 app = typer.Typer(
     name="better-dnf",
-    help="""A smarter DNF update tool for Fedora that helps you:
+    help="""🛡️  Better DNF - A smarter package update tool for Fedora
 
-  • Categorize updates by type (security, kernel, drivers, etc.)
-  • Analyze importance using changelogs and CVEs
-  • Selectively choose what to update
-  • Create btrfs snapshots before/after updates for safe rollback
-  
-Perfect for old hardware where blind 'sudo dnf upgrade' might cause issues.""",
+A safer alternative to 'sudo dnf upgrade' that gives you full control
+over which packages to update. Perfect for old hardware where blind
+updates might cause black screens, freezes, or driver issues.
+
+✨ KEY FEATURES:
+  📊 Smart categorization  - Updates grouped by type (security, kernel, drivers, etc.)
+  🔍 Importance analysis   - CVE and changelog-based risk assessment
+  🎯 Selective updates     - Choose exactly what to install
+  📸 Snapshot protection   - Btrfs snapshots for safe rollback
+  🚫 No blind upgrades    - Prevents accidental system-breaking updates
+
+🎯 PERFECT FOR:
+  • Old hardware that might break with major updates
+  • Systems with custom drivers (NVIDIA, AMD, etc.)
+  • Servers that need careful update management
+  • Anyone who wants control over their system updates
+
+📋 QUICK START:
+  better-dnf analyze              # Interactive update analysis
+  better-dnf security             # Show security updates
+  better-dnf list-updates         # List all available updates
+  better-dnf snapshot list        # View system snapshots
+
+🔗 MORE INFO:
+  GitHub: https://github.com/snap-star/better-dnf""",
     add_completion=False,
 )
 
@@ -45,33 +64,67 @@ def analyze(
         None,
         "--strategy",
         "-s",
-        help="""Update strategy (skip interactive menu):
+        help="""🎯 Update strategy (skip interactive menu).
 
-  security     - Only security patches (critical for servers)
-  kernel_drivers - Kernel and driver updates (review carefully)
-  official     - Official Fedora packages only
-  user_apps    - User-installed applications only
-  custom       - Manual selection of individual packages
-  all          - Update everything (not recommended for old hardware)""",
+STRATEGIES:
+  security     Only security patches (recommended for servers)
+  kernel_drivers Kernel and driver updates (review carefully)
+  official     Official Fedora repository packages only
+  user_apps    User-installed applications only
+  custom       Manual selection with category browsing
+  all          Update everything (⚠️  not for old hardware)
+
+💡 RECOMMENDATIONS:
+  • Start with 'security' for critical fixes
+  • Use 'user_apps' for application updates
+  • Avoid 'all' on systems with custom drivers
+  • Use 'custom' for fine-grained control
+
+Example: better-dnf analyze -s security""",
     ),
 ) -> None:
     """
-    Analyze available updates and help you choose what to install.
+    🔍 Analyze available updates and help you choose what to install.
     
     This is the main command for safely updating your system.
-    It will:
+    It provides a complete analysis workflow:
+    
+    📋 WORKFLOW:
     1. Fetch available updates from DNF repositories
-    2. Categorize them by type (security, kernel, drivers, etc.)
-    3. Analyze importance using changelogs and CVEs
-    4. Display a risk assessment
-    5. Let you select what to update interactively
-    6. Create pre and post snapshots for safe rollback
+    2. Categorize by type (security, kernel, drivers, system, apps)
+    3. Analyze importance using changelogs and CVE databases
+    4. Display risk assessment with recommendations
+    5. Let you select packages interactively with preview
+    6. Create pre/post snapshots for safe rollback
+    7. Apply updates with progress tracking
+    
+    🎯 UPDATE STRATEGIES:
+    ─────────────────────────────────────────────────
+    security       Only security patches (critical for servers)
+    kernel_drivers Kernel and driver updates (review carefully)
+    official       Official Fedora repository packages only
+    user_apps      User-installed applications only
+    custom         Manual selection with category browsing
+    all            Update everything (not recommended for old HW)
+    ─────────────────────────────────────────────────
+    
+    📸 SNAPSHOT PROTECTION:
+    By default, creates btrfs snapshots before/after updates.
+    If something breaks, rollback with: better-dnf snapshot rollback <id>
+    
+    💡 TIPS:
+    • Start with 'security' strategy for critical updates
+    • Use 'custom' to cherry-pick specific packages
+    • Add '-n' to skip snapshot creation (faster)
+    • For old hardware, avoid 'kernel_drivers' unless needed
     
     Examples:
       better-dnf analyze                    # Interactive mode
       better-dnf analyze -s security        # Security updates only
       better-dnf analyze -s kernel_drivers  # Kernel & drivers only
+      better-dnf analyze -s user_apps       # User apps only
       better-dnf analyze -n                 # Skip snapshot creation
+      better-dnf analyze -s custom          # Custom selection
     """
     try:
         console.print(
@@ -119,35 +172,66 @@ def analyze(
             )
         )
         
-        # Select update strategy
+        # Select update strategy with loop for back navigation
+        selected_packages = None
+        
+        # If strategy is provided via CLI flag, don't loop back to interactive menu
         if strategy:
             selected_strategy = strategy
+            if selected_strategy == "custom":
+                result = UpdateSelector.interactive_select_by_category(packages)
+                if result is None:
+                    console.print("[yellow]Operation cancelled by user.[/yellow]")
+                    return
+                selected_packages = result
+            elif selected_strategy == "all":
+                selected_packages = packages
+            elif selected_strategy == "security":
+                selected_packages = analyzer.get_security_updates()
+            elif selected_strategy == "kernel_drivers":
+                selected_packages = (
+                    analyzer.get_kernel_updates() +
+                    analyzer.get_driver_updates()
+                )
+            elif selected_strategy == "official":
+                selected_packages = analyzer.get_packages_by_category(UpdateCategory.OFFICIAL)
+            elif selected_strategy == "user_apps":
+                selected_packages = analyzer.get_packages_by_category(UpdateCategory.USER_APP)
+            else:
+                console.print(f"[red]Unknown strategy: {selected_strategy}[/red]")
+                return
         else:
-            selected_strategy = UpdateSelector.select_update_strategy()
-        
-        if selected_strategy is None:
-            console.print("[yellow]No strategy selected. Exiting.[/yellow]")
-            return
-        
-        # Filter packages based on strategy
-        if selected_strategy == "all":
-            selected_packages = packages
-        elif selected_strategy == "security":
-            selected_packages = analyzer.get_security_updates()
-        elif selected_strategy == "kernel_drivers":
-            selected_packages = (
-                analyzer.get_kernel_updates() +
-                analyzer.get_driver_updates()
-            )
-        elif selected_strategy == "official":
-            selected_packages = analyzer.get_packages_by_category(UpdateCategory.OFFICIAL)
-        elif selected_strategy == "user_apps":
-            selected_packages = analyzer.get_packages_by_category(UpdateCategory.USER_APP)
-        elif selected_strategy == "custom":
-            selected_packages = UpdateSelector.interactive_select_by_category(packages)
-        else:
-            console.print(f"[red]Unknown strategy: {selected_strategy}[/red]")
-            return
+            # Interactive mode - allow looping back
+            while selected_packages is None:
+                selected_strategy = UpdateSelector.select_update_strategy()
+                
+                if selected_strategy is None or selected_strategy == "cancel":
+                    console.print("[yellow]Operation cancelled by user.[/yellow]")
+                    return
+                
+                # Filter packages based on strategy
+                if selected_strategy == "all":
+                    selected_packages = packages
+                elif selected_strategy == "security":
+                    selected_packages = analyzer.get_security_updates()
+                elif selected_strategy == "kernel_drivers":
+                    selected_packages = (
+                        analyzer.get_kernel_updates() +
+                        analyzer.get_driver_updates()
+                    )
+                elif selected_strategy == "official":
+                    selected_packages = analyzer.get_packages_by_category(UpdateCategory.OFFICIAL)
+                elif selected_strategy == "user_apps":
+                    selected_packages = analyzer.get_packages_by_category(UpdateCategory.USER_APP)
+                elif selected_strategy == "custom":
+                    result = UpdateSelector.interactive_select_by_category(packages)
+                    if result is None:
+                        # User went back to strategy menu
+                        continue
+                    selected_packages = result
+                else:
+                    console.print(f"[red]Unknown strategy: {selected_strategy}[/red]")
+                    return
         
         if not selected_packages:
             console.print("[yellow]No packages selected for update.[/yellow]")
@@ -219,26 +303,33 @@ def list_updates(
         None,
         "--category",
         "-c",
-        help="""Filter by category:
+        help="""📊 Filter by update category.
 
-  security  - Security vulnerability patches
-  kernel    - Linux kernel and related packages
-  driver    - Hardware drivers (nvidia, mesa, etc.)
-  system    - Core system components (systemd, glibc, etc.)
-  official  - Standard Fedora repository packages
-  user_app  - User-installed applications
-  other     - Miscellaneous packages""",
+CATEGORIES:
+  security  Security vulnerability patches (CVE fixes)
+  kernel    Linux kernel and related packages
+  driver    Hardware drivers (NVIDIA, Mesa, etc.)
+  system    Core system components (systemd, glibc)
+  official  Standard Fedora repository packages
+  user_app  User-installed applications
+  other     Miscellaneous packages
+
+Example: better-dnf list-updates -c kernel""",
     ),
     importance: Optional[str] = typer.Option(
         None,
         "--importance",
         "-i",
-        help="""Filter by importance level:
+        help="""🎯 Filter by importance level.
 
-  critical  - Must install immediately (security vulnerabilities)
-  high      - Should install soon (crash fixes, stability)
-  medium    - Recommended (bug fixes, improvements)
-  low       - Optional (cosmetic changes, minor fixes)""",
+LEVELS:
+  critical  Must install immediately (active exploits)
+  high      Should install soon (crash fixes, stability)
+  medium    Recommended (bug fixes, improvements)
+  low       Optional (cosmetic, minor fixes)
+
+💡 TIP: Combine with -c for focused updates
+Example: better-dnf list-updates -c security -i critical""",
     ),
     all: bool = typer.Option(
         False,
@@ -248,17 +339,45 @@ def list_updates(
     ),
 ) -> None:
     """
-    List available updates with optional filtering.
+    📋 List available updates with optional filtering.
     
-    Displays a table of available updates with package names,
-    current versions, new versions, and importance levels.
+    Displays a formatted table of available updates showing:
+    • Package name and current/new versions
+    • Update category (security, kernel, driver, system, etc.)
+    • Importance level (critical, high, medium, low)
+    • Risk assessment for each package
+    
+    📊 CATEGORIES:
+    ─────────────────────────────────────────────────
+    security  Security vulnerability patches (CVE fixes)
+    kernel    Linux kernel and related packages
+    driver    Hardware drivers (NVIDIA, Mesa, etc.)
+    system    Core system components (systemd, glibc, etc.)
+    official  Standard Fedora repository packages
+    user_app  User-installed applications
+    other     Miscellaneous packages
+    ─────────────────────────────────────────────────
+    
+    🎯 IMPORTANCE LEVELS:
+    ─────────────────────────────────────────────────
+    critical  Must install immediately (active exploits)
+    high      Should install soon (crash fixes, stability)
+    medium    Recommended (bug fixes, improvements)
+    low       Optional (cosmetic, minor fixes)
+    ─────────────────────────────────────────────────
+    
+    💡 TIPS:
+    • Combine filters: -c security -i critical
+    • Use --all to see everything at once
+    • Run without filters to see grouped categories
     
     Examples:
       better-dnf list-updates                    # Show all updates
       better-dnf list-updates -c kernel          # Kernel updates only
       better-dnf list-updates -c driver          # Driver updates only
       better-dnf list-updates -i critical        # Critical updates only
-      better-dnf list-updates -c security -i high # Security + High
+      better-dnf list-updates -c security -i high # Security + High priority
+      better-dnf list-updates -c user_app        # User applications only
     """
     try:
         console.print("[bold cyan]📋 Listing Available Updates[/bold cyan]\n")
@@ -331,13 +450,35 @@ def security(
     ),
 ) -> None:
     """
-    Show and optionally apply security updates only.
+    🔒 Show and optionally apply security updates only.
     
-    Security updates fix known vulnerabilities and should be
-    applied promptly. This command:
-    1. Lists all available security updates
-    2. Shows their importance levels
-    3. Optionally applies them with snapshot protection
+    Security updates fix known vulnerabilities (CVEs) and should
+    be applied promptly to protect your system from exploits.
+    
+    🛡️  WHAT ARE SECURITY UPDATES?
+    ─────────────────────────────────────────────────
+    • Fixes for CVE (Common Vulnerabilities and Exposures)
+    • Patches for actively exploited vulnerabilities
+    • Critical fixes for authentication, permissions, etc.
+    • Kernel security patches
+    ─────────────────────────────────────────────────
+    
+    📋 WORKFLOW:
+    1. Fetch and display all available security updates
+    2. Show importance levels (critical, high, medium)
+    3. Create snapshot before applying (with -a flag)
+    4. Apply updates with confirmation
+    5. Create post-update snapshot for rollback
+    
+    ⚠️  RECOMMENDATION:
+    Apply security updates regularly! Critical vulnerabilities
+    can be exploited within hours of disclosure.
+    
+    💡 TIPS:
+    • Run 'better-dnf security' weekly to check for updates
+    • Use '-a' flag to apply immediately after listing
+    • Security updates are generally safe to apply
+    • Check 'better-dnf history' after applying
     
     Examples:
       better-dnf security        # List security updates
@@ -400,14 +541,42 @@ def snapshot(
     ),
 ) -> None:
     """
-    Manage btrfs snapshots for safe updates.
+    📸 Manage btrfs snapshots for safe system recovery.
     
-    Snapshots allow you to restore your system to a previous
-    state if an update causes problems.
+    Snapshots are point-in-time backups of your system that allow
+    you to restore to a working state if an update causes problems.
     
-    Snapshot types:
-      pre  - Created before an update (system state before)
-      post - Created after an update (system state after)
+    📸 SNAPSHOT TYPES:
+    ─────────────────────────────────────────────────
+    pre   Created BEFORE an update (system state before changes)
+    post  Created AFTER an update (system state after changes)
+    single  Standalone snapshot (created by timeline/manual)
+    ─────────────────────────────────────────────────
+    
+    🔄 PRE/POST WORKFLOW:
+    1. 'pre' snapshot = System state BEFORE update
+    2. Apply update
+    3. 'post' snapshot = System state AFTER update
+    
+    This gives you complete before/after comparison.
+    
+    💡 COMMON COMMANDS:
+    ─────────────────────────────────────────────────
+    better-dnf snapshot create              # Create new pre-update snapshot
+    better-dnf snapshot list                # View all available snapshots
+    better-dnf snapshot rollback <id>       # Restore to specific snapshot
+    ─────────────────────────────────────────────────
+    
+    ⚠️  IMPORTANT NOTES:
+    • Requires sudo privileges for snapshot operations
+    • Rollback will restore entire system state
+    • Timeline snapshots are created automatically by snapper
+    • Keep important snapshots (like before major updates)
+    
+    🔧 SNAPPER vs BETTER-DNF:
+    • Better-dnf creates 'pre' snapshots before updates
+    • Snapper creates 'post' snapshots after updates
+    • Both work together for complete protection
     
     Examples:
       better-dnf snapshot create           # Create new snapshot
@@ -459,13 +628,28 @@ def history(
     ),
 ) -> None:
     """
-    Show recent DNF update history.
+    📜 Show recent DNF update history.
     
-    Displays a table of recent DNF transactions including:
-    - Transaction ID (use with 'sudo dnf history undo <id>')
-    - Date and time
-    - Action performed (install, update, remove)
-    - Packages affected
+    Displays a formatted table of recent DNF transactions to help
+    you track what changes were made to your system.
+    
+    📋 TRANSACTION INFO:
+    ─────────────────────────────────────────────────
+    ID        Transaction identifier (use with 'dnf history undo')
+    Date      When the transaction occurred
+    Action    What was done (install, update, remove)
+    Packages  Number of packages affected
+    ─────────────────────────────────────────────────
+    
+    🔄 UNDOING UPDATES:
+    If an update caused problems, you can undo it:
+      sudo dnf history undo <transaction-id>
+    
+    💡 TIPS:
+    • Use this to verify recent better-dnf operations
+    • Check history before rolling back to identify issues
+    • Default shows 5 recent transactions
+    • Increase with -l flag for more history
     
     Examples:
       better-dnf history          # Show last 5 transactions
@@ -513,7 +697,12 @@ def history(
 @app.command()
 def version() -> None:
     """
-    Show version information.
+    ℹ️  Show version information.
+    
+    Displays the current version of better-dnf.
+    Useful for bug reports and checking for updates.
+    
+    Example: better-dnf version
     """
     from . import __version__
     console.print(f"[bold cyan]Better DNF[/bold cyan] v{__version__}")

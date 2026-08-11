@@ -11,6 +11,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich import box
 
+from .sudo import run_sudo
+
 console = Console()
 
 
@@ -154,21 +156,15 @@ class SnapshotManager:
         """
         try:
             # Create snapshot with specified type
-            cmd = ["sudo", "snapper", "create", "-d", description or snapshot_name, "-t", snapshot_type]
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                ["snapper", "create", "-d", description or snapshot_name, "-t", snapshot_type],
                 timeout=30,
             )
             
             if result.returncode == 0:
                 # Get the snapshot number
-                list_cmd = ["sudo", "snapper", "list", "--columns", "number", "--columns", "description", "--csvout"]
-                list_result = subprocess.run(
-                    list_cmd,
-                    capture_output=True,
-                    text=True,
+                list_result = run_sudo(
+                    ["snapper", "list", "--columns", "number", "--columns", "description", "--csvout"],
                     timeout=10,
                 )
                 
@@ -206,17 +202,14 @@ class SnapshotManager:
         """
         try:
             # Create snapshots directory if it doesn't exist
-            subprocess.run(
-                ["sudo", "mkdir", "-p", cls.DEFAULT_SNAPSHOT_PATH],
-                capture_output=True,
+            run_sudo(
+                ["mkdir", "-p", cls.DEFAULT_SNAPSHOT_PATH],
                 timeout=5,
             )
             
             # Get root subvolume
-            result = subprocess.run(
-                ["sudo", "btrfs", "subvolume", "show", "/"],
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                ["btrfs", "subvolume", "show", "/"],
                 timeout=10,
             )
             
@@ -225,17 +218,13 @@ class SnapshotManager:
             
             # Create snapshot
             snapshot_path = f"{cls.DEFAULT_SNAPSHOT_PATH}/{snapshot_name}"
-            cmd = [
-                "sudo", "btrfs", "subvolume", "snapshot",
-                "-r",  # Read-only snapshot
-                "/",
-                snapshot_path,
-            ]
-            
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                [
+                    "btrfs", "subvolume", "snapshot",
+                    "-r",  # Read-only snapshot
+                    "/",
+                    snapshot_path,
+                ],
                 timeout=60,
             )
             
@@ -274,10 +263,8 @@ class SnapshotManager:
         snapshots = []
         try:
             # Try with --csvout first
-            result = subprocess.run(
-                ["sudo", "snapper", "list", "--csvout"],
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                ["snapper", "list", "--csvout"],
                 timeout=10,
             )
             
@@ -303,10 +290,8 @@ class SnapshotManager:
                         })
             else:
                 # If CSV fails, try plain output
-                result2 = subprocess.run(
-                    ["sudo", "snapper", "list"],
-                    capture_output=True,
-                    text=True,
+                result2 = run_sudo(
+                    ["snapper", "list"],
                     timeout=10,
                 )
                 if result2.returncode == 0 and result2.stdout.strip():
@@ -352,10 +337,8 @@ class SnapshotManager:
         snapshots = []
         try:
             # List subvolumes
-            result = subprocess.run(
-                ["sudo", "btrfs", "subvolume", "list", "-s", cls.DEFAULT_SNAPSHOT_PATH],
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                ["btrfs", "subvolume", "list", "-s", cls.DEFAULT_SNAPSHOT_PATH],
                 timeout=10,
             )
             
@@ -422,10 +405,8 @@ class SnapshotManager:
     def _rollback_snapper(cls, snapshot_id: str) -> Tuple[bool, str]:
         """Rollback using snapper."""
         try:
-            result = subprocess.run(
-                ["sudo", "snapper", "rollback", snapshot_id],
-                capture_output=True,
-                text=True,
+            result = run_sudo(
+                ["snapper", "rollback", snapshot_id],
                 timeout=30,
             )
             
@@ -444,14 +425,12 @@ class SnapshotManager:
             
             # This is a simplified rollback - actual btrfs rollback is more complex
             # and typically requires booting from a live USB
-            result = subprocess.run(
+            result = run_sudo(
                 [
-                    "sudo", "btrfs", "subvolume", "delete", "/",
-                    "&&", "sudo", "btrfs", "subvolume", "snapshot",
+                    "btrfs", "subvolume", "delete", "/",
+                    "&&", "btrfs", "subvolume", "snapshot",
                     snapshot_path, "/",
                 ],
-                capture_output=True,
-                text=True,
                 timeout=60,
             )
             

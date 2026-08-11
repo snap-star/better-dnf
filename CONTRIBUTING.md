@@ -73,7 +73,20 @@ pytest tests/test_parser.py
 
 # Run with verbose output
 pytest -v
+
+# Run with full coverage report (terminal + HTML + XML)
+make test-cov
 ```
+
+### Coverage Requirements
+
+The project uses `pytest-cov` with a **`fail_under = 70`** gate configured in `pyproject.toml` — the test command exits non-zero if total line coverage drops below 70%. When adding new code:
+
+1. Add tests for it (target **80%+** for the module you touch)
+2. Run `make test-cov` to see per-module percentages and which lines are uncovered
+3. The report is sorted weakest-first so under-covered modules stand out immediately
+
+Current weakest module (baseline at 1.0.0): `selector.py` (60%) — a great candidate for new tests. (`parser.py` is at 100%.)
 
 ### Code Quality
 

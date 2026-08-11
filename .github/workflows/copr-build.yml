@@ -1,0 +1,62 @@
+# GitHub Actions Workflow for Automatic COPR Builds
+# Triggers when a new release is published on GitHub
+
+name: Build and Publish to COPR
+
+on:
+  release:
+    types: [published]
+
+env:
+  COPR_OWNER: snap-star
+  COPR_PROJECT: better-dnf
+
+jobs:
+  copr-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install copr-cli
+        run: |
+          python -m pip install --upgrade pip
+          pip install copr-cli
+
+      - name: Configure COPR CLI
+        run: |
+          mkdir -p ~/.config
+          echo "${{ secrets.COPR_CONFIG }}" > ~/.config/copr
+          chmod 600 ~/.config/copr
+
+      - name: Extract version from release tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
+
+      - name: Trigger COPR build
+        run: |
+          echo "Triggering COPR build for better-dnf ${{ steps.version.outputs.version }}"
+          
+          # Build from PyPI source
+          # COPR will automatically build the package
+          copr-cli build ${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }} \
+            pypi:better-dnf==${{ steps.version.outputs.version }}
+          
+          echo ""
+          echo "✅ Build triggered successfully!"
+          echo "📊 Monitor at: https://copr.fedorainfracloud.org/coprs/${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }}/builds/"
+
+      - name: Print installation instructions
+        run: |
+          echo ""
+          echo "📦 Users can install with:"
+          echo "   sudo dnf copr enable ${{ env.COPR_OWNER }}/${{ env.COPR_PROJECT }}"
+          echo "   sudo dnf install better-dnf"

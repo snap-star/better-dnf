@@ -28,8 +28,10 @@ test:
 	pytest tests/ -v
 
 # Run tests with coverage
+# Terminal report shows per-module percentages + missing lines (fail_under enforced)
+# HTML report for browsing, XML report for CI (codecov)
 test-cov:
-	pytest tests/ -v --cov=better_dnf --cov-report=html
+	pytest tests/ -v --cov=better_dnf --cov-report=term-missing --cov-report=html --cov-report=xml
 
 # Run linter
 lint:

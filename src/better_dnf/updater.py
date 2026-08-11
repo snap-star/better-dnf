@@ -13,6 +13,7 @@ from rich import box
 
 from .models import PackageUpdate, UpdatePlan
 from .snapshot import SnapshotManager
+from .sudo import ensure_sudo_credentials
 
 console = Console()
 
@@ -41,6 +42,19 @@ class UpdateApplier:
         if not plan.packages:
             return (True, "No packages to update")
         
+        # Ensure sudo is authenticated before any privileged operation.
+        # Sudo normally needs a terminal to prompt for the password; since we
+        # run with piped stdio (no TTY), a bare 'sudo dnf upgrade' fails with
+        # "a terminal is required to read the password".  We pre-authenticate
+        # here and keep the password to feed back via 'sudo -S' if needed.
+        sudo_password: Optional[str] = None
+        if not dry_run:
+            auth_ok, sudo_password = ensure_sudo_credentials(
+                probe_args=["dnf", "upgrade"]
+            )
+            if not auth_ok:
+                return (False, "Sudo authentication cancelled by user")
+        
         # Create snapshot if requested
         if create_snapshot and not dry_run:
             console.print("\n[bold cyan]📸 Creating pre-update snapshot...[/bold cyan]")
@@ -63,8 +77,13 @@ class UpdateApplier:
             cmd = ["dnf", "upgrade", "--assumeno"] + package_names
             console.print(f"\n[bold]Dry run: {' '.join(cmd)}[/bold]")
         else:
-            # Use -y flag to auto-confirm since we already confirmed with user
-            cmd = ["sudo", "dnf", "upgrade", "-y"] + package_names
+            # Use -y flag to auto-confirm since we already confirmed with user.
+            # When we have a password, use 'sudo -S' so sudo reads it from
+            # stdin instead of requiring a terminal.
+            cmd = (
+                ["sudo"] + (["-S"] if sudo_password else []) +
+                ["dnf", "upgrade", "-y"] + package_names
+            )
         
         # Display what we're about to do
         cls._display_update_command(cmd, plan, dry_run)
@@ -92,6 +111,7 @@ class UpdateApplier:
             # Run dnf update with real-time output
             process = subprocess.Popen(
                 cmd,
+                stdin=subprocess.PIPE if sudo_password else None,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,  # Merge stderr into stdout
                 text=True,
@@ -99,12 +119,23 @@ class UpdateApplier:
                 preexec_fn=os.setsid if sys.platform != 'win32' else None,
             )
             
+            # Feed the sudo password through stdin when needed
+            if sudo_password:
+                try:
+                    process.stdin.write(sudo_password + "\n")
+                    process.stdin.flush()
+                    process.stdin.close()
+                except (BrokenPipeError, OSError):
+                    pass
+            
             # Read output in real-time
-            output_lines = []
             for line in iter(process.stdout.readline, ''):
                 if line:
                     line = line.rstrip()
-                    output_lines.append(line)
+                    # Filter out sudo's own password prompt (we already asked)
+                    lowered = line.lower()
+                    if "[sudo] password" in lowered or lowered.startswith("password:"):
+                        continue
                     # Show progress for important lines
                     if 'Downloading' in line or 'Installing' in line or 'Upgrading' in line:
                         console.print(f"  [cyan]→[/cyan] {line}")
@@ -231,10 +262,9 @@ class UpdateApplier:
             Tuple of (success, message)
         """
         try:
-            result = subprocess.run(
-                ["sudo", "dnf", "history", "list", "--limit", "1"],
-                capture_output=True,
-                text=True,
+            from .sudo import run_sudo
+            result = run_sudo(
+                ["dnf", "history", "list", "--limit", "1"],
                 timeout=10,
             )
             
@@ -258,10 +288,9 @@ class UpdateApplier:
             List of transaction dictionaries
         """
         try:
-            result = subprocess.run(
-                ["sudo", "dnf", "history", "list", f"--limit={limit}", "--reverse"],
-                capture_output=True,
-                text=True,
+            from .sudo import run_sudo
+            result = run_sudo(
+                ["dnf", "history", "list", f"--limit={limit}", "--reverse"],
                 timeout=10,
             )
             

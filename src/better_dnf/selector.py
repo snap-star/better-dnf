@@ -182,7 +182,7 @@ class UpdateSelector:
     def interactive_select_by_category(
         cls,
         packages: List[PackageUpdate],
-    ) -> List[PackageUpdate]:
+    ) -> Optional[List[PackageUpdate]]:
         """
         Interactively select packages by category.
         
@@ -190,7 +190,7 @@ class UpdateSelector:
             packages: List of PackageUpdate objects
             
         Returns:
-            List of selected PackageUpdate objects
+            List of selected PackageUpdate objects, or None to go back to strategy menu
         """
         # Get unique categories present in packages
         categories = list(set(pkg.category for pkg in packages))
@@ -199,59 +199,79 @@ class UpdateSelector:
             console.print("[yellow]No packages to select from.[/yellow]")
             return []
         
-        # Create choices for category selection
-        choices = []
-        for category in categories:
-            display_name, color = cls.CATEGORY_DISPLAY[category]
-            count = len([p for p in packages if p.category == category])
+        while True:
+            # Create choices for category selection
+            choices = []
+            for category in categories:
+                display_name, color = cls.CATEGORY_DISPLAY[category]
+                count = len([p for p in packages if p.category == category])
+                choices.append(
+                    questionary.Choice(
+                        title=f"{display_name} ({count} packages)",
+                        value=category,
+                    )
+                )
+            
+            # Add special choices
+            choices.append(questionary.Separator())
             choices.append(
                 questionary.Choice(
-                    title=f"{display_name} ({count} packages)",
-                    value=category,
+                    title="📋 Show All Categories",
+                    value="all",
                 )
             )
-        
-        # Add special choices
-        choices.append(questionary.Separator())
-        choices.append(
-            questionary.Choice(
-                title="📋 Show All Categories",
-                value="all",
+            choices.append(
+                questionary.Choice(
+                    title="✅ Select All Packages",
+                    value="select_all",
+                )
             )
-        )
-        choices.append(
-            questionary.Choice(
-                title="✅ Select All Packages",
-                value="select_all",
+            choices.append(questionary.Separator())
+            choices.append(
+                questionary.Choice(
+                    title="⬅️  Back to Strategy Menu",
+                    value="back",
+                )
             )
-        )
-        
-        # Prompt user
-        selected = questionary.select(
-            "Which category would you like to review?",
-            choices=choices,
-            use_shortcuts=True,
-        ).ask()
-        
-        if selected is None:
-            return []
-        
-        if selected == "select_all":
-            return cls._select_individual_packages(packages)
-        
-        if selected == "all":
-            # Show all categories and let user select
-            return cls._select_individual_packages(packages)
-        
-        # Show packages in selected category
-        category_packages = [p for p in packages if p.category == selected]
-        return cls._select_individual_packages(category_packages)
+            choices.append(
+                questionary.Choice(
+                    title="❌ Cancel",
+                    value="cancel",
+                )
+            )
+            
+            # Prompt user
+            selected = questionary.select(
+                "Which category would you like to review?",
+                choices=choices,
+                use_shortcuts=True,
+            ).ask()
+            
+            if selected is None or selected == "cancel":
+                return None
+            
+            if selected == "back":
+                return None
+            
+            if selected == "select_all":
+                return cls._select_individual_packages(packages)
+            
+            if selected == "all":
+                # Show all categories and let user select
+                return cls._select_individual_packages(packages)
+            
+            # Show packages in selected category
+            category_packages = [p for p in packages if p.category == selected]
+            result = cls._select_individual_packages(category_packages)
+            if result is not None:  # User made a selection
+                return result
+            # If result is None, user pressed back, loop again
     
     @classmethod
     def _select_individual_packages(
         cls,
         packages: List[PackageUpdate],
-    ) -> List[PackageUpdate]:
+    ) -> Optional[List[PackageUpdate]]:
         """
         Let user select individual packages from a list.
         
@@ -259,7 +279,7 @@ class UpdateSelector:
             packages: List of PackageUpdate objects
             
         Returns:
-            List of selected PackageUpdate objects
+            List of selected PackageUpdate objects, or None to go back to category selection
         """
         if not packages:
             console.print("[yellow]No packages available for selection.[/yellow]")
@@ -278,8 +298,19 @@ class UpdateSelector:
             key=lambda p: importance_order.get(p.importance, 4),
         )
         
-        # Create checkbox choices
+        # Create checkbox choices with back option
         choices = []
+        
+        # Add back option at the top
+        choices.append(
+            questionary.Choice(
+                title="⬅️  Back to Category Selection",
+                value="back",
+                checked=False,
+            )
+        )
+        choices.append(questionary.Separator())
+        
         for pkg in sorted_packages:
             importance_display, _ = cls.IMPORTANCE_DISPLAY[pkg.importance]
             display_text = f"{pkg.name} ({pkg.old_version} → {pkg.new_version}) {importance_display}"
@@ -301,7 +332,14 @@ class UpdateSelector:
             choices=choices,
         ).ask()
         
-        return selected if selected else []
+        if selected is None:
+            # User pressed Escape - exit completely
+            return None
+        
+        if "back" in selected:
+            return None  # Signal to go back to category selection
+        
+        return selected
     
     @classmethod
     def create_update_plan(
@@ -469,7 +507,7 @@ class UpdateSelector:
         Let user choose an update strategy.
         
         Returns:
-            Selected strategy string
+            Selected strategy string, or None if cancelled
         """
         choices = [
             questionary.Choice(
@@ -501,6 +539,11 @@ class UpdateSelector:
                 title="✅ Update All",
                 value="all",
                 description="Update all available packages (not recommended for old hardware)",
+            ),
+            questionary.Separator(),
+            questionary.Choice(
+                title="❌ Cancel",
+                value="cancel",
             ),
         ]
         

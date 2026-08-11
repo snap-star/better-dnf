@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "better-dnf"
-version = "0.1.0"
+version = "1.0.0"
 description = "A smarter DNF update tool that categorizes updates and lets you choose what to install safely"
 readme = "README.md"
 license = "MIT"
@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["fedora", "dnf", "updates", "package-manager", "security"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
@@ -73,3 +73,22 @@ warn_unused_configs = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
+
+[tool.coverage.run]
+# Measure the better_dnf package only (not tests or site-packages)
+source = ["better_dnf"]
+
+[tool.coverage.report]
+# Show uncovered lines for each module
+show_missing = true
+# Show every module, even fully covered ones
+skip_covered = false
+# Sort by lowest coverage first so weak modules stand out
+sort = "cover"
+# CI gate: coverage must stay above this floor
+fail_under = 80
+# Lines matching these regexes are excluded from coverage totals
+exclude_lines = [
+    "if TYPE_CHECKING:",
+    "if __name__ == \"__main__\":",
+]

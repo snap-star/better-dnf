@@ -1,0 +1,84 @@
+# GitHub Actions Release Workflow
+# Creates releases when version tags are pushed
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Creating release for version: $VERSION"
+
+      - name: Build package
+        run: |
+          python -m build
+          ls -la dist/
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Extract changelog for this version
+          if [ -f CHANGELOG.md ]; then
+            CHANGELOG=$(sed -n "/^## \[${{ steps.version.outputs.version }}\]/,/^## \[/p" CHANGELOG.md | head -n -1)
+          else
+            CHANGELOG="Release ${{ steps.version.outputs.version }}"
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: "Better DNF v${{ steps.version.outputs.version }}"
+          body: |
+            ## Better DNF v${{ steps.version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### Installation
+            
+            **Fedora COPR (Recommended):**
+            ```bash
+            sudo dnf copr enable snap-star/better-dnf
+            sudo dnf install better-dnf
+            ```
+            
+            **From Source:**
+            ```bash
+            pip install https://github.com/snap-star/better-dnf/archive/v${{ steps.version.outputs.version }}.tar.gz
+            ```
+          files: |
+            dist/*
+          generate_release_notes: false
+          draft: false
+          prerelease: false
