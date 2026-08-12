@@ -9,7 +9,11 @@ Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
-BuildRequires:  python3-setuptools
+BuildRequires:  python3-hatchling
+BuildRequires:  python3-packaging
+BuildRequires:  python3-questionary
+BuildRequires:  python3-rich
+BuildRequires:  python3-typer
 
 %global _description %{expand:
 A smarter DNF update tool that categorizes updates and lets you
@@ -29,10 +33,6 @@ Features:
 
 %package -n     python3-%{name}
 Summary:        %{summary}
-Requires:       python3-typer
-Requires:       python3-rich
-Requires:       python3-questionary
-Requires:       python3-packaging
 
 %description -n python3-%{name} %{_description}
 
@@ -40,17 +40,20 @@ Requires:       python3-packaging
 %autosetup -n %{name}-%{version}
 
 %build
-%py3_build
+%pyproject_wheel
 
 %install
-%py3_install
+%pyproject_install
+%pyproject_save_files better_dnf
+
+%check
+%pyproject_check_import better_dnf
 
 %files -n python3-%{name}
 %license LICENSE
 %doc README.md CHANGELOG.md
 %{_bindir}/%{name}
-%{python3_sitelib}/%{name}/
-%{python3_sitelib}/%{name}-%{version}-py?.?.egg-info/
+%{pyproject_files}
 
 %changelog
 * Tue Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.1-1
@@ -59,8 +62,11 @@ Requires:       python3-packaging
 - Sudo/tty fixes: keep controlling terminal (tty_tickets), no double-executed probes
 - Snapshot post pairing with --pre-number + verification + standalone fallback
 - Remove unused --all flag and unused requests/pyyaml dependencies
+- Use PEP 517 pyproject macros (%pyproject_wheel/%pyproject_install/%pyproject_save_files)
+  instead of legacy %py3_build/%py3_install, fixing the COPR build (the project has no
+  setup.py - it is a pure pyproject.toml/hatchling project)
 
-* Mon Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.0.0-1
+* Tue Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.0.0-1
 - First stable release
 - Smart categorization of updates
 - Importance analysis using changelogs and CVEs

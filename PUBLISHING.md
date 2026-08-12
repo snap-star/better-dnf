@@ -31,17 +31,40 @@ COPR (Cool Other Package Repo) is Fedora's official third-party repository syste
 ```bash
 # Install COPR CLI
 sudo dnf install copr-cli
-
-# Login to COPR (will prompt for credentials)
-copr-cli new-api-token  # opens your browser; token is saved to ~/.config/copr
 ```
+
+`copr-cli` authenticates with an API token stored in `~/.config/copr`. Log in to
+[copr.fedorainfracloud.org/api/](https://copr.fedorainfracloud.org/api/) — the page
+shows your credentials as a ready-made snippet. Save it as `~/.config/copr`:
+
+```ini
+[copr-cli]
+login = <login hash>
+username = <your username>
+token = <token>
+copr_url = https://copr.fedorainfracloud.org
+```
+
+```bash
+chmod 600 ~/.config/copr
+copr-cli whoami   # should print your username
+```
+
+> ⚠️ Two gotchas:
+> - **Never create `~/.config/copr` with `sudo`.** copr-cli runs as your user, and
+>   if it can't read the file it silently falls back to GSSAPI (Kerberos) auth —
+>   you'll see a wall of `401 Unauthorized` / `gssapi_login` errors and
+>   "Can't detect who are you" from `whoami`. Fix a root-owned file with
+>   `sudo chown $USER:$USER ~/.config/copr`.
+> - **`copr-cli new-api-token` is not a first-time setup command** — it only
+>   *refreshes* an existing token and errors with "File ~/.config/copr not found"
+>   if no config exists yet.
 
 ### Step 3: Create COPR Project
 
 ```bash
-# Create project for multiple Fedora versions
+# Create project for the supported Fedora versions (drop EOL releases)
 copr-cli create better-dnf \
-    --chroot fedora-42-x86_64 \
     --chroot fedora-43-x86_64 \
     --chroot fedora-44-x86_64 \
     --chroot fedora-rawhide-x86_64 \
@@ -100,9 +123,9 @@ This repository ships ready-made GitHub Actions workflows — no webhook setup n
 
 To use them:
 
-1. Push a version tag: `git tag v1.0.0 && git push origin v1.0.0`
+1. Push a version tag: `git tag v1.1.1 && git push origin v1.1.1`
 2. Add the `COPR_CONFIG` secret to GitHub (Settings → Secrets and variables → Actions, with the contents of your `~/.config/copr` file)
-3. The release and COPR build happen automatically
+3. The release and COPR build happen automatically — `copr-build.yml` triggers on the **tag push** (`v*`) and runs `copr-cli buildscm` against that tag
 
 ---
 
@@ -242,11 +265,13 @@ sudo dnf install better-dnf
 
 ## 🔧 Spec File Template
 
-The `better-dnf.spec` file is included in this repository. Key sections:
+The `better-dnf.spec` file is included in this repository. Key sections (note the
+PEP 517 `%pyproject_*` macros — the legacy `%py3_build`/`%py3_install` macros run
+`setup.py`, which doesn't exist in this pyproject.toml-only project):
 
 ```spec
 Name:           better-dnf
-Version:        1.0.0
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -256,19 +281,20 @@ Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
-BuildRequires:  python3-setuptools
+BuildRequires:  python3-hatchling
 
-%description
-A smarter DNF update tool that categorizes updates...
+%build
+%pyproject_wheel
 
 %install
-%py3_install
+%pyproject_install
+%pyproject_save_files better_dnf
 
 %files -n python3-%{name}
 %license LICENSE
 %doc README.md CHANGELOG.md
 %{_bindir}/%{name}
-%{python3_sitelib}/%{name}/
+%{pyproject_files}
 ```
 
 ---

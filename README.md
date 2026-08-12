@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
-[![Fedora](https://img.shields.io/badge/Fedora-42+-294172.svg)](https://getfedora.org/)
+[![Fedora](https://img.shields.io/badge/Fedora-43+-294172.svg)](https://getfedora.org/)
 [![Version](https://img.shields.io/badge/version-1.1.1-blue.svg)](https://github.com/snap-star/better-dnf)
 
 A smarter DNF update tool that categorizes updates and lets you choose what to install safely. Perfect for old hardware where blind `sudo dnf upgrade` might cause driver crashes, black screens, or system instability.
@@ -149,7 +149,7 @@ Automatically installed with pip:
 
 ### System Requirements
 
-- **OS**: Fedora 42 or later (COPR packages; older releases may still work when run from source)
+- **OS**: Fedora 43 or later (COPR packages; older releases may still work when run from source)
 - **Python**: 3.9 or later
 - **Optional**: `snapper` for advanced snapshot management
 - **Optional**: `btrfs` for native snapshot support
