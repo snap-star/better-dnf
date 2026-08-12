@@ -292,11 +292,10 @@ BuildRequires:  python3-devel
 %pyproject_install
 %pyproject_save_files better_dnf
 
-%files -n python3-%{name}
+%files -n python3-%{name} -f %{pyproject_files}
 %license LICENSE
 %doc README.md CHANGELOG.md
 %{_bindir}/%{name}
-%{pyproject_files}
 ```
 
 ---

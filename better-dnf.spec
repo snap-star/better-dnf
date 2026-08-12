@@ -50,11 +50,10 @@ Summary:        %{summary}
 %check
 %pyproject_check_import better_dnf
 
-%files -n python3-%{name}
+%files -n python3-%{name} -f %{pyproject_files}
 %license LICENSE
 %doc README.md CHANGELOG.md
 %{_bindir}/%{name}
-%{pyproject_files}
 
 %changelog
 * Tue Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.1-1
