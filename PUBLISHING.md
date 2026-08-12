@@ -281,7 +281,9 @@ Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
-BuildRequires:  python3-hatchling
+
+%generate_buildrequires
+%pyproject_buildrequires -r
 
 %build
 %pyproject_wheel

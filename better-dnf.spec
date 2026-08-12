@@ -9,11 +9,12 @@ Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 
 BuildArch:      noarch
 BuildRequires:  python3-devel
-BuildRequires:  python3-hatchling
-BuildRequires:  python3-packaging
-BuildRequires:  python3-questionary
-BuildRequires:  python3-rich
-BuildRequires:  python3-typer
+
+# Dynamic BuildRequires: installs the build backend (hatchling), the PEP 517
+# frontend (pip/wheel) and -r the runtime dependencies (typer, rich, questionary,
+# packaging) needed by %%pyproject_check_import.
+%generate_buildrequires
+%pyproject_buildrequires -r
 
 %global _description %{expand:
 A smarter DNF update tool that categorizes updates and lets you
@@ -65,6 +66,8 @@ Summary:        %{summary}
 - Use PEP 517 pyproject macros (%pyproject_wheel/%pyproject_install/%pyproject_save_files)
   instead of legacy %py3_build/%py3_install, fixing the COPR build (the project has no
   setup.py - it is a pure pyproject.toml/hatchling project)
+- Generate BuildRequires dynamically with %pyproject_buildrequires -r (buildroots no
+  longer ship pip by default, so %pyproject_wheel needs it installed explicitly)
 
 * Tue Aug 11 2026 snap-star <rendiyuspramana@gmail.com> - 1.0.0-1
 - First stable release
