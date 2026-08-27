@@ -781,5 +781,92 @@ def version() -> None:
     console.print(f"[bold cyan]Better DNF[/bold cyan] v{__version__}")
 
 
+@app.command()
+def upgrade() -> None:
+    """
+    ⬆️  Upgrade better-dnf to the latest version from COPR.
+
+    Checks for a newer version of better-dnf in the configured
+    COPR repository and installs it if available.
+
+    💡 TIPS:
+    • Run this after a new release to get the latest features
+    • Requires sudo privileges to install the upgrade
+    • Uses the same COPR repo that was set up during installation
+
+    Examples:
+      better-dnf upgrade          # Check and upgrade if available
+    """
+    from . import __version__
+    from .sudo import run_sudo
+
+    try:
+        console.print("[bold cyan]⬆️  Checking for better-dnf updates...[/bold cyan]\n")
+
+        # Check current version
+        console.print(f"[dim]Current version: {__version__}[/dim]")
+
+        # Check for available updates
+        with console.status("[bold green]Checking COPR repository...[/bold green]"):
+            result = run_sudo(
+                ["dnf", "check-update", "better-dnf"],
+                timeout=30,
+            )
+
+        # dnf check-update returns exit code 0 when no updates, 100 when updates available
+        if result.returncode == 0:
+            console.print("[green]✓ better-dnf is already up to date![/green]")
+            return
+
+        if result.returncode == 100:
+            # Parse available update info from stdout
+            lines = result.stdout.strip().split("\n")
+            for line in lines:
+                if "better-dnf" in line:
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        console.print(f"[yellow]📦 Update available: {parts[-1]}[/yellow]")
+                    break
+
+        # Confirm upgrade
+        from questionary import confirm
+
+        if not confirm("Upgrade better-dnf now?", default=True).ask():
+            console.print("[yellow]Upgrade cancelled.[/yellow]")
+            return
+
+        # Perform upgrade
+        console.print("\n[bold cyan]⬆️  Upgrading better-dnf...[/bold cyan]")
+        upgrade_result = run_sudo(
+            ["dnf", "upgrade", "better-dnf", "-y"],
+            timeout=120,
+        )
+
+        if upgrade_result.returncode == 0:
+            console.print(
+                Panel(
+                    "[green]✓ better-dnf upgraded successfully![/green]\n"
+                    "[dim]Restart your shell or run 'hash -r' to use the new version.[/dim]",
+                    title="Upgrade Complete",
+                    border_style="green",
+                )
+            )
+        else:
+            console.print(
+                Panel(
+                    f"[red]✗ Upgrade failed:[/red]\n{upgrade_result.stderr}",
+                    title="Upgrade Failed",
+                    border_style="red",
+                )
+            )
+
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Upgrade cancelled by user.[/yellow]")
+        raise typer.Exit()
+    except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
+        console.print(f"[red]Error: {e!s}[/red]")
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     app()

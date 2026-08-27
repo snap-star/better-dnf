@@ -1,5 +1,5 @@
 Name:           better-dnf
-Version:        1.1.2
+Version:        1.1.3
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -56,6 +56,9 @@ Summary:        %{summary}
 %{_bindir}/%{name}
 
 %changelog
+* Tue Aug 12 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.3-1
+- Add 'better-dnf upgrade' command to self-update from COPR
+
 * Tue Aug 12 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.2-1
 - Fix snapper rollback: pass --ambit when default subvolume is detected
 - Add _get_default_subvolume_id() to detect btrfs subvolume ID for rollback

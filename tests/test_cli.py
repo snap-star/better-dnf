@@ -680,3 +680,77 @@ class TestVersionCommand:
 
         assert result.exit_code == 0
         assert "Better DNF" in cli_env["text"]()
+
+
+class TestUpgradeCommand:
+    """Tests for the upgrade command."""
+
+    def test_already_up_to_date(self, cli_env):
+        with patch("better_dnf.sudo.run_sudo") as mock_run:
+            mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 0
+        assert "already up to date" in cli_env["text"]()
+
+    def test_update_available_shows_version(self, cli_env):
+        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
+            "questionary.confirm"
+        ) as confirm:
+            # dnf check-update returns 100 when updates are available
+            mock_run.return_value = Mock(
+                returncode=100,
+                stdout="better-dnf  1.1.3  1.1.2  copr:https://...",
+                stderr="",
+            )
+            confirm.return_value.ask.return_value = False
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 0
+        assert "Update available" in cli_env["text"]()
+
+    def test_user_confirms_upgrade(self, cli_env):
+        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
+            "questionary.confirm"
+        ) as confirm:
+            mock_run.side_effect = [
+                Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
+                Mock(returncode=0, stdout="Complete!", stderr=""),
+            ]
+            confirm.return_value.ask.return_value = True
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 0
+        assert "Upgrade Complete" in cli_env["text"]()
+        assert mock_run.call_count == 2
+
+    def test_user_cancels_upgrade(self, cli_env):
+        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
+            "questionary.confirm"
+        ) as confirm:
+            mock_run.return_value = Mock(
+                returncode=100,
+                stdout="better-dnf  1.1.3  1.1.2",
+                stderr="",
+            )
+            confirm.return_value.ask.return_value = False
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 0
+        assert "Upgrade cancelled" in cli_env["text"]()
+        # Only called once (check-update), not for the actual upgrade
+        assert mock_run.call_count == 1
+
+    def test_upgrade_failure_shows_error(self, cli_env):
+        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
+            "questionary.confirm"
+        ) as confirm:
+            mock_run.side_effect = [
+                Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
+                Mock(returncode=1, stdout="", stderr="Error: package not found"),
+            ]
+            confirm.return_value.ask.return_value = True
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 0
+        assert "Upgrade Failed" in cli_env["text"]()

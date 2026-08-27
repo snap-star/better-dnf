@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-08-12
+
+### ✨ Added
+
+- **`better-dnf upgrade` command** - Self-update command that checks the COPR repository for a newer version of better-dnf and installs it. Uses `dnf check-update` to detect available updates and `dnf upgrade` to apply them.
+
+### 🧪 Testing
+
+- **243 unit tests** (up from 238):
+  - `test_cli.py` — added 5 tests for the upgrade command (up-to-date, update available, confirm, cancel, failure)
+
+---
+
 ## [1.1.2] - 2026-08-12
 
 ### 🐛 Fixed
