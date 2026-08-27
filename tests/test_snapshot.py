@@ -613,6 +613,45 @@ class TestListSnapshots:
         assert result == []
 
 
+class TestGetDefaultSubvolumeId:
+    """Tests for _get_default_subvolume_id."""
+
+    def test_returns_id_from_get_default(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout="ID 257 (root)"),
+        ):
+            assert SnapshotManager._get_default_subvolume_id() == "257"
+
+    def test_returns_id_from_long_format(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout="ID 257 gen 12 top level 5 path @"),
+        ):
+            assert SnapshotManager._get_default_subvolume_id() == "257"
+
+    def test_returns_none_on_failure(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(1, stderr="error"),
+        ):
+            assert SnapshotManager._get_default_subvolume_id() is None
+
+    def test_returns_none_on_unexpected_output(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            return_value=_cp(0, stdout="unexpected output"),
+        ):
+            assert SnapshotManager._get_default_subvolume_id() is None
+
+    def test_returns_none_on_exception(self):
+        with patch(
+            "better_dnf.snapshot.run_sudo",
+            side_effect=RuntimeError("boom"),
+        ):
+            assert SnapshotManager._get_default_subvolume_id() is None
+
+
 class TestRollback:
     """Tests for the rollback flow."""
 
@@ -685,14 +724,60 @@ class TestRollback:
         mock_rollback.assert_called_once_with("7")
 
     def test_snapper_rollback_failure(self):
-        with patch(
-            "better_dnf.snapshot.run_sudo",
-            return_value=_cp(1, stderr="failed to rollback"),
+        with (
+            patch.object(
+                SnapshotManager,
+                "_get_default_subvolume_id",
+                return_value="257",
+            ),
+            patch(
+                "better_dnf.snapshot.run_sudo",
+                return_value=_cp(1, stderr="failed to rollback"),
+            ),
         ):
             ok, msg = SnapshotManager._rollback_snapper("42")
 
         assert ok is False
         assert "failed to rollback" in msg
+
+    def test_snapper_rollback_passes_ambit(self):
+        """Rollback includes --ambit when default subvolume is detected."""
+        with (
+            patch.object(
+                SnapshotManager,
+                "_get_default_subvolume_id",
+                return_value="257",
+            ),
+            patch(
+                "better_dnf.snapshot.run_sudo",
+                return_value=_cp(0, stdout=""),
+            ) as mock_run,
+        ):
+            ok, _msg = SnapshotManager._rollback_snapper("42")
+
+        assert ok is True
+        cmd = mock_run.call_args.args[0]
+        assert "--ambit" in cmd
+        assert cmd[cmd.index("--ambit") + 1] == "257"
+
+    def test_snapper_rollback_omits_ambit_when_undetectable(self):
+        """Rollback omits --ambit when default subvolume cannot be detected."""
+        with (
+            patch.object(
+                SnapshotManager,
+                "_get_default_subvolume_id",
+                return_value=None,
+            ),
+            patch(
+                "better_dnf.snapshot.run_sudo",
+                return_value=_cp(0, stdout=""),
+            ) as mock_run,
+        ):
+            ok, _msg = SnapshotManager._rollback_snapper("42")
+
+        assert ok is True
+        cmd = mock_run.call_args.args[0]
+        assert "--ambit" not in cmd
 
     def test_btrfs_rollback_failure(self):
         with patch(
