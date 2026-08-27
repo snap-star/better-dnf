@@ -825,7 +825,9 @@ def upgrade() -> None:
                 if "better-dnf" in line:
                     parts = line.split()
                     if len(parts) >= 2:
-                        console.print(f"[yellow]📦 Update available: {parts[-1]}[/yellow]")
+                        console.print(
+                            f"[yellow]📦 Update available: {parts[-1]}[/yellow]"
+                        )
                     break
 
         # Confirm upgrade
