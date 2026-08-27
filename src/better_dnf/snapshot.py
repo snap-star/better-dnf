@@ -568,7 +568,7 @@ class SnapshotManager:
                 match = re.search(r"ID\s+(\d+)", result.stdout)
                 if match:
                     return match.group(1)
-        except Exception:  # noqa: BLE001 - best-effort detection
+        except Exception:  # noqa: BLE001, S110 - best-effort detection
             pass
         return None
 
