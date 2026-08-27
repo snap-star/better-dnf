@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-08-12
+
+### 🐛 Fixed
+
+- **Snapper rollback fails with "Cannot detect ambit since default subvolume is unknown"** - `snapper rollback` requires the `--ambit` option when the default subvolume is unknown. Added `_get_default_subvolume_id()` to detect the btrfs subvolume ID via `btrfs subvolume get-default /` and pass it as `--ambit` to the rollback command. Gracefully omits the flag when detection fails.
+
+### 🧪 Testing
+
+- **238 unit tests** (up from 231):
+  - `test_snapshot.py` — added 8 tests for `_get_default_subvolume_id()` (output parsing, failure, exception) and rollback with/without `--ambit`
+
+---
+
+## [1.1.1] - 2026-08-11
+
+### ✨ Added
+
+- **GitHub Pages documentation site** - New `docs/` MkDocs site (index, user guide, command reference) built with `mkdocs build --strict` and deployed to GitHub Pages by the `docs.yml` workflow on every push to `main`.
+
 ### 🐛 Fixed
 
 - **CI type-check (mypy) failures** - Fixed 13 mypy errors across `parser.py`, `analyzer.py`, `selector.py`, `snapshot.py`, `updater.py`, and `cli.py` (untyped `info` dict, `builtins.any` used as a type, `no-any-return` on questionary results, optional `Popen` stdio handles, and `select_update_strategy` now honestly typed as `str | None`). Also bumped the mypy `python_version` config to 3.10 and pinned `mypy<2.0` (mypy 2.x dropped Python 3.9 support, and the CI matrix still runs 3.9), keeping the Python 3.9 runtime floor intact — the type annotations stay 3.9-safe via `from __future__ import annotations`.

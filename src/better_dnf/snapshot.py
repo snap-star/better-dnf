@@ -552,6 +552,27 @@ class SnapshotManager:
         return snapshots
 
     @classmethod
+    def _get_default_subvolume_id(cls) -> str | None:
+        """Detect the default btrfs subvolume ID (the "ambit").
+
+        Returns:
+            The subvolume ID as a string, or None if detection fails.
+        """
+        try:
+            result = run_sudo(
+                ["btrfs", "subvolume", "get-default", "/"],
+                timeout=10,
+            )
+            if result.returncode == 0:
+                # Output looks like: "ID 5 (root)" or "ID 257 gen 12 top level 5 path @"
+                match = re.search(r"ID\s+(\d+)", result.stdout)
+                if match:
+                    return match.group(1)
+        except Exception:  # noqa: BLE001, S110 - best-effort detection
+            pass
+        return None
+
+    @classmethod
     def rollback_snapshot(cls, snapshot_id: str) -> tuple[bool, str]:
         """
         Rollback to a specific snapshot.
@@ -597,10 +618,15 @@ class SnapshotManager:
     def _rollback_snapper(cls, snapshot_id: str) -> tuple[bool, str]:
         """Rollback using snapper."""
         try:
-            result = run_sudo(
-                ["snapper", "rollback", snapshot_id],
-                timeout=30,
-            )
+            cmd = ["snapper", "rollback", snapshot_id]
+
+            # Snapper needs --ambit when the default subvolume is unknown.
+            # Detect the current default subvolume and pass it explicitly.
+            ambit = cls._get_default_subvolume_id()
+            if ambit:
+                cmd += ["--ambit", ambit]
+
+            result = run_sudo(cmd, timeout=30)
 
             if result.returncode == 0:
                 return (True, f"Successfully rolled back to snapshot {snapshot_id}")
