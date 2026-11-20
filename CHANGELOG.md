@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-20
+
 ### ✨ Added
 
 - **`better-dnf snapshot delete <id>`** - The snapshot action menu only had `create`, `list` and `rollback`, so snapshots could not be removed from the CLI. `delete` removes a snapshot (pairing the post snapshot when a `pre` snapshot is deleted, as snapper requires) and asks for confirmation unless `--yes`/`-y` is given.
 - **Automatic snapshot retention (keep latest 30)** - After every successful snapshot creation, `SnapshotManager.cleanup_old_snapshots()` deletes the oldest better-dnf snapshots beyond the latest 30 (`DEFAULT_RETENTION`), so forgotten snapshots no longer pile up. Snapper timeline snapshots and hand-made snapshots are never touched, and cleanup failures only produce a dim warning.
+
+### 🐛 Fixed
+
+- **`signal` could be unbound in the update cleanup paths** - It was imported inside the `try:` body, so the SIGKILL fallback in the `except` handler could raise `UnboundLocalError`; the import is now module-level.
+- **Pylance/Pyright reported `rich` and `questionary` as missing imports** - The editor was analyzing with an interpreter that lacked the project's dependencies. A project `.venv` plus tracked `pyrightconfig.json` (and `.vscode/settings.json`) now point the analyzer at the installed package.
 
 ### 🧪 Testing
 

@@ -5,6 +5,7 @@ Module for applying selected package updates.
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 
 from rich import box
@@ -116,7 +117,6 @@ class UpdateApplier:
 
         process = None
         try:
-            import signal
             import sys
 
             # Run dnf update with real-time output.  Use preexec_fn=os.setpgrp
@@ -213,8 +213,6 @@ class UpdateApplier:
             if process and process.poll() is None:
                 # Process is still running, kill it
                 try:
-                    import signal
-
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                     process.wait(timeout=5)
                 except Exception:  # noqa: BLE001 - best-effort cleanup on interrupt
@@ -228,8 +226,6 @@ class UpdateApplier:
         except subprocess.TimeoutExpired:
             if process:
                 try:
-                    import signal
-
                     os.killpg(os.getpgid(process.pid), signal.SIGKILL)
                 except Exception:  # noqa: BLE001, S110 - best-effort cleanup
                     pass
@@ -238,8 +234,6 @@ class UpdateApplier:
         except Exception as e:  # noqa: BLE001 - surface any update failure to the user
             if process and process.poll() is None:
                 try:
-                    import signal
-
                     os.killpg(os.getpgid(process.pid), signal.SIGTERM)
                 except Exception:  # noqa: BLE001, S110 - best-effort cleanup
                     pass

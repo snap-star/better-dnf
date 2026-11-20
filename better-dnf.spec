@@ -1,5 +1,5 @@
 Name:           better-dnf
-Version:        1.1.3
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -56,6 +56,10 @@ Summary:        %{summary}
 %{_bindir}/%{name}
 
 %changelog
+* Fri Nov 20 2026 snap-star <rendiyuspramana@gmail.com> - 1.2.0-1
+- Add 'snapshot delete' action to remove a snapshot (pre/post pairs together)
+- Automatically keep only the latest 30 better-dnf snapshots
+
 * Tue Aug 12 2026 snap-star <rendiyuspramana@gmail.com> - 1.1.3-1
 - Add 'better-dnf upgrade' command to self-update from COPR
 
