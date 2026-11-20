@@ -68,6 +68,11 @@ class UpdateApplier:
             if success:
                 plan.snapshot_id = snapshot_id
                 console.print(f"[green]✓ {message}[/green]")
+                # Automatic retention: keep only the latest 30 better-dnf
+                # snapshots so they never pile up unnoticed.
+                _removed, cleanup_msg = SnapshotManager.cleanup_old_snapshots()
+                if cleanup_msg:
+                    console.print(f"[dim]🧹 {cleanup_msg}[/dim]")
             else:
                 console.print(f"[yellow]⚠️  {message}[/yellow]")
                 console.print("[dim]Continuing without snapshot...[/dim]")

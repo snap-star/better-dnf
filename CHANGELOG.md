@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### ✨ Added
+
+- **`better-dnf snapshot delete <id>`** - The snapshot action menu only had `create`, `list` and `rollback`, so snapshots could not be removed from the CLI. `delete` removes a snapshot (pairing the post snapshot when a `pre` snapshot is deleted, as snapper requires) and asks for confirmation unless `--yes`/`-y` is given.
+- **Automatic snapshot retention (keep latest 30)** - After every successful snapshot creation, `SnapshotManager.cleanup_old_snapshots()` deletes the oldest better-dnf snapshots beyond the latest 30 (`DEFAULT_RETENTION`), so forgotten snapshots no longer pile up. Snapper timeline snapshots and hand-made snapshots are never touched, and cleanup failures only produce a dim warning.
+
+### 🧪 Testing
+
+- **258 unit tests** (up from 243):
+  - `test_snapshot.py` — added tests for `delete_snapshot` (not found, snapper single/pre+post pairing, btrfs read-only clearing, failure) and `cleanup_old_snapshots` (below threshold, keep newest 30, foreign snapshots untouched, stale pre/post pairing)
+  - `test_cli.py` — added tests for `snapshot delete` (missing id, `--yes`, cancel, failure) and automatic cleanup after `snapshot create`
+  - `test_updater.py` — asserted retention runs after the pre-update snapshot
+
 ## [1.1.3] - 2026-08-12
 
 ### ✨ Added

@@ -75,3 +75,4 @@ mock-results/
 
 # MkDocs output
 site/
+.marscode

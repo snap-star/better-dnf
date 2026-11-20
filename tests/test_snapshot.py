@@ -835,3 +835,248 @@ class TestDisplaySnapshots:
         from rich.table import Table
 
         assert any(isinstance(a[0], Table) for a in printed if a)
+
+
+class TestDeleteSnapshot:
+    """Tests for deleting a single snapshot."""
+
+    def test_not_found(self):
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(SnapshotManager, "_list_snapper_snapshots", return_value=[]),
+        ):
+            ok, msg = SnapshotManager.delete_snapshot("99")
+
+        assert ok is False
+        assert "Snapshot 99 not found" in msg
+
+    def test_snapper_delete_single(self):
+        run = _cp(0, stdout="")
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[
+                    {"id": "42", "type": "single", "description": "better-dnf-1"}
+                ],
+            ),
+            patch("better_dnf.snapshot.run_sudo", return_value=run) as sudo,
+        ):
+            ok, msg = SnapshotManager.delete_snapshot("42")
+
+        assert ok is True
+        assert "Deleted snapshot 42" in msg
+        assert sudo.call_args.args[0] == ["snapper", "delete", "42"]
+
+    def test_snapper_delete_removes_paired_post(self):
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[
+                    {"id": "41", "type": "pre", "pre_num": "", "description": "a"},
+                    {
+                        "id": "43",
+                        "type": "post",
+                        "pre_num": "41",
+                        "description": "b",
+                    },
+                ],
+            ),
+            patch("better_dnf.snapshot.run_sudo", return_value=_cp(0)) as sudo,
+        ):
+            ok, _msg = SnapshotManager.delete_snapshot("41")
+
+        assert ok is True
+        assert sudo.call_args.args[0] == ["snapper", "delete", "41", "43"]
+
+    def test_snapper_delete_failure_message(self):
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_list_snapper_snapshots",
+                return_value=[{"id": "42", "type": "single"}],
+            ),
+            patch(
+                "better_dnf.snapshot.run_sudo",
+                return_value=_cp(1, stderr="snapshot is in use"),
+            ),
+        ):
+            ok, msg = SnapshotManager.delete_snapshot("42")
+
+        assert ok is False
+        assert "snapshot is in use" in msg
+
+    def test_btrfs_delete_clears_readonly_then_deletes(self):
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=False),
+            patch.object(
+                SnapshotManager,
+                "_list_btrfs_snapshots",
+                return_value=[
+                    {
+                        "id": "260",
+                        "name": "better-dnf-20260101-120000",
+                        "path": "/.snapshots/better-dnf-20260101-120000",
+                    }
+                ],
+            ),
+            patch("better_dnf.snapshot.run_sudo", return_value=_cp(0)) as sudo,
+        ):
+            ok, _msg = SnapshotManager.delete_snapshot("260")
+
+        assert ok is True
+        calls = [c.args[0] for c in sudo.call_args_list]
+        assert calls[0] == [
+            "btrfs",
+            "property",
+            "set",
+            "/.snapshots/better-dnf-20260101-120000",
+            "ro",
+            "false",
+        ]
+        assert calls[1] == [
+            "btrfs",
+            "subvolume",
+            "delete",
+            "/.snapshots/better-dnf-20260101-120000",
+        ]
+
+
+class TestCleanupOldSnapshots:
+    """Tests for the keep-latest-30 retention policy."""
+
+    def test_nothing_to_do_below_retention(self):
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager, "_list_snapper_snapshots", return_value=[]
+            ) as listing,
+            patch("better_dnf.snapshot.run_sudo") as sudo,
+        ):
+            deleted, msg = SnapshotManager.cleanup_old_snapshots()
+
+        assert deleted == 0
+        assert msg == ""
+        listing.assert_called_once()
+        sudo.assert_not_called()
+
+    def test_keeps_newest_thirty_managed_snapshots(self):
+        snapshots = [
+            {
+                "id": str(i),
+                "type": "single",
+                "description": f"better-dnf-{i}",
+                "pre_num": "",
+            }
+            for i in range(1, 36)
+        ]
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager, "_list_snapper_snapshots", return_value=snapshots
+            ),
+            patch("better_dnf.snapshot.run_sudo", return_value=_cp(0)) as sudo,
+        ):
+            deleted, msg = SnapshotManager.cleanup_old_snapshots()
+
+        assert deleted == 5
+        assert "keeping the latest 30" in msg
+        assert sudo.call_args.args[0] == ["snapper", "delete", "1", "2", "3", "4", "5"]
+
+    def test_never_deletes_foreign_snapshots(self):
+        snapshots = [
+            {
+                "id": str(i),
+                "type": "single",
+                "description": "timeline",
+                "pre_num": "",
+            }
+            for i in range(1, 40)
+        ] + [
+            {
+                "id": "100",
+                "type": "single",
+                "description": f"better-dnf-{i}",
+                "pre_num": "",
+            }
+            for i in range(2)
+        ]
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager, "_list_snapper_snapshots", return_value=snapshots
+            ),
+            patch("better_dnf.snapshot.run_sudo") as sudo,
+        ):
+            deleted, msg = SnapshotManager.cleanup_old_snapshots()
+
+        assert deleted == 0
+        assert msg == ""
+        sudo.assert_not_called()
+
+    def test_deletes_paired_post_of_stale_pre(self):
+        # 31 managed snapshots: 15 pre/post pairs plus one newer single, so
+        # the oldest snapshot (a pre) is stale and snapper needs its post
+        # deleted in the same call.
+        snapshots = []
+        for i in range(1, 16):
+            snapshots.append(
+                {
+                    "id": str(i * 2 - 1),
+                    "type": "pre",
+                    "pre_num": "",
+                    "description": f"better-dnf-pre-{i}",
+                }
+            )
+            snapshots.append(
+                {
+                    "id": str(i * 2),
+                    "type": "post",
+                    "pre_num": str(i * 2 - 1),
+                    "description": f"better-dnf-post-{i}",
+                }
+            )
+        snapshots.append(
+            {
+                "id": "100",
+                "type": "single",
+                "description": "better-dnf-a",
+                "pre_num": "",
+            }
+        )
+        with (
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager, "_list_snapper_snapshots", return_value=snapshots
+            ),
+            patch("better_dnf.snapshot.run_sudo", return_value=_cp(0)) as sudo,
+        ):
+            deleted, _msg = SnapshotManager.cleanup_old_snapshots()
+
+        assert deleted == 2
+        assert sudo.call_args.args[0] == ["snapper", "delete", "1", "2"]
+
+    def test_snapper_description_is_prefixed(self):
+        with (
+            patch.object(SnapshotManager, "is_btrfs_root", return_value=True),
+            patch.object(SnapshotManager, "is_snapper_installed", return_value=True),
+            patch.object(
+                SnapshotManager,
+                "_create_snapper_snapshot",
+                return_value=(True, "42", "ok"),
+            ) as mock_snapper,
+        ):
+            SnapshotManager.create_snapshot(description="before updates")
+
+        assert mock_snapper.call_args.args[1] == "before updates"
+        assert (
+            SnapshotManager._snapper_description("better-dnf-x", "before updates")
+            == "better-dnf: before updates"
+        )
+        assert (
+            SnapshotManager._snapper_description("better-dnf-x", None) == "better-dnf-x"
+        )

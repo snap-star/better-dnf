@@ -229,7 +229,12 @@ better-dnf snapshot list
 
 # Rollback to a specific snapshot
 better-dnf snapshot rollback <snapshot-id>
+
+# Delete a specific snapshot
+better-dnf snapshot delete <snapshot-id>
 ```
+
+Only the latest 30 better-dnf snapshots are kept: when a new snapshot is created, older better-dnf snapshots are deleted automatically, so they never pile up if you forget to clean up. Snapper timeline snapshots and snapshots you create by hand are never removed automatically.
 
 Better-dnf automatically creates the `post` snapshot after a successful update, linked to the `pre` snapshot it was paired with (snapper requires `--pre-number` for post snapshots). If an update fails or the post snapshot is missing, you can complete the pair manually with `better-dnf snapshot create post`.
 
@@ -297,6 +302,7 @@ better-dnf analyze
 | `better-dnf snapshot list` | ✅ | List system snapshots |
 | `better-dnf snapshot create` | ✅ | Create new snapshot (pre/post/single) |
 | `better-dnf snapshot rollback` | ✅ | Rollback system state |
+| `better-dnf snapshot delete` | ✅ | Delete a snapshot |
 | `better-dnf history` | ✅ | View update history |
 
 When sudo is needed, your system will prompt for your password.

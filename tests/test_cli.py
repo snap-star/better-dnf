@@ -517,6 +517,15 @@ class TestSecurityCommand:
 class TestSnapshotCommand:
     """Tests for the snapshot command."""
 
+    @pytest.fixture(autouse=True)
+    def _isolate_retention(self):
+        """Keep automatic retention out of command tests (no real sudo)."""
+        with patch(
+            "better_dnf.cli.SnapshotManager.cleanup_old_snapshots",
+            return_value=(0, ""),
+        ):
+            yield
+
     def test_create_success(self, cli_env):
         with patch(
             "better_dnf.cli.SnapshotManager.create_snapshot",
@@ -635,6 +644,62 @@ class TestSnapshotCommand:
         rollback.assert_called_once_with("42")
         assert "Rollback failed" in cli_env["text"]()
 
+    def test_create_runs_retention_cleanup(self, cli_env):
+        with (
+            patch(
+                "better_dnf.cli.SnapshotManager.create_snapshot",
+                return_value=(True, "52", "Snapshot created successfully: 52"),
+            ),
+            patch(
+                "better_dnf.cli.SnapshotManager.cleanup_old_snapshots",
+                return_value=(2, "Auto-cleanup: deleted 2 old snapshot(s)"),
+            ) as cleanup,
+        ):
+            result = runner.invoke(app, ["snapshot", "create"])
+
+        assert result.exit_code == 0
+        cleanup.assert_called_once()
+        assert "Auto-cleanup: deleted 2 old snapshot(s)" in cli_env["text"]()
+
+    def test_delete_requires_id(self, cli_env):
+        result = runner.invoke(app, ["snapshot", "delete"])
+
+        assert result.exit_code == 0
+        assert "Please provide a snapshot ID to delete" in cli_env["text"]()
+
+    def test_delete_with_yes_flag(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.delete_snapshot",
+            return_value=(True, "Deleted snapshot 42"),
+        ) as delete:
+            result = runner.invoke(app, ["snapshot", "delete", "42", "--yes"])
+
+        assert result.exit_code == 0
+        delete.assert_called_once_with("42")
+        assert "Deleted snapshot 42" in cli_env["text"]()
+
+    def test_delete_confirmed_as_cancel(self, cli_env):
+        with (
+            patch("better_dnf.cli.SnapshotManager.delete_snapshot") as delete,
+            patch("questionary.confirm") as confirm,
+        ):
+            confirm.return_value.ask.return_value = False
+            result = runner.invoke(app, ["snapshot", "delete", "42"])
+
+        assert result.exit_code == 0
+        delete.assert_not_called()
+        assert "Delete cancelled by user" in cli_env["text"]()
+
+    def test_delete_failure(self, cli_env):
+        with patch(
+            "better_dnf.cli.SnapshotManager.delete_snapshot",
+            return_value=(False, "Snapshot 42 not found"),
+        ):
+            result = runner.invoke(app, ["snapshot", "delete", "42", "-y"])
+
+        assert result.exit_code == 0
+        assert "Snapshot 42 not found" in cli_env["text"]()
+
     def test_unknown_action(self, cli_env):
         result = runner.invoke(app, ["snapshot", "bogus"])
 
@@ -694,9 +759,10 @@ class TestUpgradeCommand:
         assert "already up to date" in cli_env["text"]()
 
     def test_update_available_shows_version(self, cli_env):
-        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
-            "questionary.confirm"
-        ) as confirm:
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("questionary.confirm") as confirm,
+        ):
             # dnf check-update returns 100 when updates are available
             mock_run.return_value = Mock(
                 returncode=100,
@@ -710,9 +776,10 @@ class TestUpgradeCommand:
         assert "Update available" in cli_env["text"]()
 
     def test_user_confirms_upgrade(self, cli_env):
-        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
-            "questionary.confirm"
-        ) as confirm:
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("questionary.confirm") as confirm,
+        ):
             mock_run.side_effect = [
                 Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
                 Mock(returncode=0, stdout="Complete!", stderr=""),
@@ -725,9 +792,10 @@ class TestUpgradeCommand:
         assert mock_run.call_count == 2
 
     def test_user_cancels_upgrade(self, cli_env):
-        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
-            "questionary.confirm"
-        ) as confirm:
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("questionary.confirm") as confirm,
+        ):
             mock_run.return_value = Mock(
                 returncode=100,
                 stdout="better-dnf  1.1.3  1.1.2",
@@ -742,9 +810,10 @@ class TestUpgradeCommand:
         assert mock_run.call_count == 1
 
     def test_upgrade_failure_shows_error(self, cli_env):
-        with patch("better_dnf.sudo.run_sudo") as mock_run, patch(
-            "questionary.confirm"
-        ) as confirm:
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("questionary.confirm") as confirm,
+        ):
             mock_run.side_effect = [
                 Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
                 Mock(returncode=1, stdout="", stderr="Error: package not found"),

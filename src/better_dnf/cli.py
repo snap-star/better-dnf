@@ -543,10 +543,11 @@ def snapshot(
 
   create   - Create a new snapshot (default: pre; use 'post' after updates)
   list     - List all available snapshots
-  rollback - Rollback to a specific snapshot (requires snapshot-id)"""),
+  rollback - Rollback to a specific snapshot (requires snapshot-id)
+  delete   - Delete a specific snapshot (requires snapshot-id)"""),
     snapshot_id: Optional[str] = typer.Argument(  # noqa: FA100
         None,
-        help="""Snapshot ID for rollback, or snapshot type for 'create'
+        help="""Snapshot ID for rollback/delete, or snapshot type for 'create'
 (pre, post, single). Default type is 'pre'.""",
     ),
     snapshot_type: Optional[str] = typer.Option(  # noqa: FA100
@@ -575,6 +576,12 @@ Example: better-dnf snapshot create post --pre-number 307""",
         "--description",
         "-d",
         help="Optional description for the new snapshot",
+    ),
+    yes: bool = typer.Option(
+        False,
+        "--yes",
+        "-y",
+        help="Skip the confirmation prompt when deleting a snapshot",
     ),
 ) -> None:
     """
@@ -609,7 +616,14 @@ Example: better-dnf snapshot create post --pre-number 307""",
     better-dnf snapshot create --type post --description "after kernel"
     better-dnf snapshot list                # View all available snapshots
     better-dnf snapshot rollback <id>       # Restore to specific snapshot
+    better-dnf snapshot delete <id>         # Delete a specific snapshot
     ─────────────────────────────────────────────────
+
+    🧹 AUTOMATIC CLEANUP:
+    Only the latest 30 better-dnf snapshots are kept. After each new
+    snapshot is created, older better-dnf snapshots are deleted
+    automatically so they never pile up. Snapper timeline snapshots and
+    snapshots created by hand are never removed automatically.
 
     ⚠️  IMPORTANT NOTES:
     • Requires sudo privileges for snapshot operations
@@ -629,6 +643,7 @@ Example: better-dnf snapshot create post --pre-number 307""",
       better-dnf snapshot create -t single      # Create standalone snapshot
       better-dnf snapshot list                  # List all snapshots
       better-dnf snapshot rollback 307          # Rollback to snapshot #307
+      better-dnf snapshot delete 307            # Delete snapshot #307
     """
     try:
         if action == "create":
@@ -661,6 +676,12 @@ Example: better-dnf snapshot create post --pre-number 307""",
                 )
             if success:
                 console.print(f"[green]✓ {message}[/green]")
+                # Keep the snapshot archive bounded: drop the oldest
+                # better-dnf snapshots so users who forget to clean up
+                # never accumulate an unbounded pile.
+                _removed, cleanup_msg = SnapshotManager.cleanup_old_snapshots()
+                if cleanup_msg:
+                    console.print(f"[dim]🧹 {cleanup_msg}[/dim]")
             else:
                 console.print(f"[red]✗ {message}[/red]")
 
@@ -678,9 +699,32 @@ Example: better-dnf snapshot create post --pre-number 307""",
             else:
                 console.print(f"[red]✗ {message}[/red]")
 
+        elif action == "delete":
+            if not snapshot_id:
+                console.print("[red]Please provide a snapshot ID to delete.[/red]")
+                return
+
+            if not yes:
+                from questionary import confirm
+
+                if not confirm(
+                    f"Delete snapshot {snapshot_id}? This cannot be undone.",
+                    default=False,
+                ).ask():
+                    console.print("[yellow]Delete cancelled by user.[/yellow]")
+                    return
+
+            success, message = SnapshotManager.delete_snapshot(snapshot_id)
+            if success:
+                console.print(f"[green]✓ {message}[/green]")
+            else:
+                console.print(f"[red]✗ {message}[/red]")
+
         else:
             console.print(f"[red]Unknown action: {action}[/red]")
-            console.print("[dim]Available actions: create, list, rollback[/dim]")
+            console.print(
+                "[dim]Available actions: create, list, rollback, delete[/dim]"
+            )
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")

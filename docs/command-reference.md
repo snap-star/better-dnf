@@ -162,6 +162,7 @@ Manage btrfs snapshots (via snapper) for safe rollback.
 better-dnf snapshot create
 better-dnf snapshot list
 better-dnf snapshot rollback <snapshot-id>
+better-dnf snapshot delete <snapshot-id>
 ```
 
 ### Actions
@@ -171,6 +172,9 @@ better-dnf snapshot rollback <snapshot-id>
 | `create` | Create a snapshot (default type `pre`) |
 | `list` | List all available snapshots |
 | `rollback` | Roll back to a specific snapshot (requires id) |
+| `delete` | Delete a specific snapshot (requires id, asks for confirmation) |
+
+Only the latest **30** better-dnf snapshots are kept: after every new snapshot is created the oldest better-dnf snapshots are deleted automatically. Snapper timeline snapshots and snapshots you created by hand are never removed automatically — use `delete` for those.
 
 ### Options (for `create`)
 
@@ -179,6 +183,7 @@ better-dnf snapshot rollback <snapshot-id>
 | `--type <type>` | `-t` | `pre` | Snapshot type: `pre`, `post`, or `single` |
 | `--pre-number <n>` | — | latest `pre` | Pre snapshot to pair a `post` with |
 | `--description <text>` | `-d` | — | Optional description for the snapshot |
+| `--yes` | `-y` | `false` | Skip the confirmation prompt for `delete` |
 
 ### Snapshot types
 
@@ -198,6 +203,8 @@ better-dnf snapshot create single               # standalone snapshot
 better-dnf snapshot create -t post -d "after kernel update"
 better-dnf snapshot list                        # list all snapshots
 better-dnf snapshot rollback 307                # roll back to snapshot #307
+better-dnf snapshot delete 307                  # delete snapshot #307
+better-dnf snapshot delete 307 --yes            # delete without confirmation
 ```
 
 > 💡 Better DNF auto-creates `pre` + `post` pairs during updates. `create post` is for completing a pair manually (e.g. after a failed update). If pairing is refused, a standalone `single` snapshot is created as a fallback.

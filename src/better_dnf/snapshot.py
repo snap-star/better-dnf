@@ -29,6 +29,11 @@ class SnapshotManager:
     # Snapshot prefix for our tool
     SNAPSHOT_PREFIX = "better-dnf"
 
+    # Keep only this many better-dnf snapshots. Older ones are removed
+    # automatically after each new snapshot is created, so snapshots never
+    # pile up when the user forgets to delete them by hand.
+    DEFAULT_RETENTION = 30
+
     @classmethod
     def is_btrfs_root(cls) -> bool:
         """
@@ -291,7 +296,7 @@ class SnapshotManager:
                 "snapper",
                 "create",
                 "-d",
-                description or snapshot_name,
+                cls._snapper_description(snapshot_name, description),
                 "-t",
                 snapshot_type,
             ]
@@ -324,6 +329,19 @@ class SnapshotManager:
             return (False, None, "Snapshot creation timed out")
         except Exception as e:  # noqa: BLE001 - surface any failure to the user
             return (False, None, f"Error creating snapshot: {e!s}")
+
+    @classmethod
+    def _snapper_description(cls, snapshot_name: str, description: str | None) -> str:
+        """Build a snapper description that marks the snapshot as ours.
+
+        The prefix is what lets cleanup_old_snapshots() tell better-dnf
+        snapshots apart from snapper timeline snapshots and snapshots the
+        user created by hand, so retention never touches those.
+        """
+        text = (description or snapshot_name).strip()
+        if text.lower().startswith(cls.SNAPSHOT_PREFIX):
+            return text
+        return f"{cls.SNAPSHOT_PREFIX}: {text}"
 
     @classmethod
     def _create_btrfs_snapshot(
@@ -550,6 +568,177 @@ class SnapshotManager:
             pass
 
         return snapshots
+
+    @classmethod
+    def _is_managed_snapshot(cls, snap: dict) -> bool:
+        """Whether a snapshot was created by better-dnf.
+
+        Only these are eligible for automatic deletion - snapper timeline
+        snapshots and snapshots created manually are left alone.
+        """
+        return any(
+            str(snap.get(key, "")).strip().lower().startswith(cls.SNAPSHOT_PREFIX)
+            for key in ("description", "name")
+        )
+
+    @staticmethod
+    def _snapshot_sort_key(snap: dict) -> int:
+        """Sort key: snapshot/subvolume numbers grow with creation time."""
+        raw = str(snap.get("id", ""))
+        return int(raw) if raw.isdigit() else 0
+
+    @classmethod
+    def _load_snapshots(cls) -> tuple[bool, list[dict]]:
+        """Return (uses_snapper, snapshots) with a single backend probe."""
+        if cls.is_snapper_installed():
+            return (True, cls._list_snapper_snapshots())
+        return (False, cls._list_btrfs_snapshots())
+
+    @classmethod
+    def delete_snapshot(cls, snapshot_id: str) -> tuple[bool, str]:
+        """
+        Delete a single snapshot.
+
+        When snapper is used and the snapshot is a 'pre' snapshot, its
+        paired 'post' snapshot is deleted in the same call (snapper refuses
+        to remove a pre snapshot while its post snapshot still exists).
+
+        Args:
+            snapshot_id: Snapper number, btrfs subvolume ID, or snapshot name
+
+        Returns:
+            Tuple of (success, message)
+        """
+        use_snapper, snapshots = cls._load_snapshots()
+        target = next(
+            (
+                s
+                for s in snapshots
+                if str(s.get("id", "")) == str(snapshot_id)
+                or str(s.get("name", "")) == str(snapshot_id)
+            ),
+            None,
+        )
+        if target is None:
+            return (False, f"Snapshot {snapshot_id} not found")
+
+        doomed = [target]
+        if use_snapper and target.get("type") == "pre":
+            for snap in snapshots:
+                if snap.get("type") == "post" and str(
+                    snap.get("pre_num", "")
+                ).strip() == str(target.get("id", "")):
+                    doomed.append(snap)
+                    break
+
+        deleted, error = cls._delete_snapshots(doomed, use_snapper)
+        if deleted:
+            return (True, f"Deleted snapshot {snapshot_id}")
+        return (False, f"Failed to delete snapshot {snapshot_id}: {error}")
+
+    @classmethod
+    def _delete_snapshots(
+        cls, snapshots: list[dict], use_snapper: bool
+    ) -> tuple[int, str]:
+        """Delete snapshot records (best effort).
+
+        Returns:
+            Tuple of (number deleted, error summary - empty on full success)
+        """
+        if not snapshots:
+            return (0, "")
+
+        if use_snapper:
+            ids = [str(s.get("id", "")) for s in snapshots if s.get("id")]
+            try:
+                result = run_sudo(["snapper", "delete"] + ids, timeout=120)
+            except subprocess.TimeoutExpired:
+                return (0, "snapper delete timed out")
+            except Exception as e:  # noqa: BLE001 - surface any failure to caller
+                return (0, f"Error deleting snapshots: {e!s}")
+            if result.returncode == 0:
+                return (len(ids), "")
+            return (0, (result.stderr or "snapper delete failed").strip())
+
+        deleted = 0
+        errors: list[str] = []
+        for snap in snapshots:
+            path = str(
+                snap.get("path")
+                or f"{cls.DEFAULT_SNAPSHOT_PATH}/{snap.get('name') or snap.get('id')}"
+            )
+            try:
+                # btrfs rejects deleting read-only snapshots, so clear the
+                # read-only flag first. Failure here is fine (already
+                # writable), the delete below reports the real error.
+                run_sudo(["btrfs", "property", "set", path, "ro", "false"], timeout=15)
+                result = run_sudo(["btrfs", "subvolume", "delete", path], timeout=30)
+            except subprocess.TimeoutExpired:
+                errors.append(f"{path}: timed out")
+                continue
+            except Exception as e:  # noqa: BLE001 - keep deleting the rest
+                errors.append(f"{path}: {e!s}")
+                continue
+            if result.returncode == 0:
+                deleted += 1
+            else:
+                errors.append((result.stderr or f"failed to delete {path}").strip())
+        return (deleted, "; ".join(errors))
+
+    @classmethod
+    def cleanup_old_snapshots(cls, keep: int = DEFAULT_RETENTION) -> tuple[int, str]:
+        """
+        Delete the oldest better-dnf snapshots, keeping the newest `keep`.
+
+        Only snapshots created by better-dnf are considered, so timeline and
+        hand-made snapshots are never removed.  This runs automatically
+        after a snapshot is created; it is safe to call at any time.
+
+        Args:
+            keep: Number of most recent better-dnf snapshots to keep
+
+        Returns:
+            Tuple of (number deleted, message - empty when nothing was done)
+        """
+        try:
+            keep = max(int(keep), 1)
+        except (TypeError, ValueError):
+            keep = cls.DEFAULT_RETENTION
+
+        use_snapper, snapshots = cls._load_snapshots()
+        managed = [s for s in snapshots if cls._is_managed_snapshot(s)]
+        if len(managed) <= keep:
+            return (0, "")
+
+        managed.sort(key=cls._snapshot_sort_key)
+        stale = managed[: len(managed) - keep]
+        stale_ids = {str(s.get("id", "")) for s in stale}
+
+        if use_snapper:
+            # A pre snapshot can only be deleted together with its post
+            # pair. The post is newer, so it is normally already stale - this
+            # covers the remaining edge cases.
+            for snap in snapshots:
+                if snap.get("type") != "post":
+                    continue
+                snap_id = str(snap.get("id", ""))
+                if snap_id in stale_ids:
+                    continue
+                if str(snap.get("pre_num", "")).strip() in stale_ids:
+                    stale.append(snap)
+                    stale_ids.add(snap_id)
+
+        deleted, error = cls._delete_snapshots(stale, use_snapper)
+        if deleted == 0:
+            return (0, f"Snapshot cleanup failed: {error}" if error else "")
+
+        message = (
+            f"Auto-cleanup: deleted {deleted} old snapshot(s), "
+            f"keeping the latest {keep}."
+        )
+        if error:
+            message += f" Some could not be deleted: {error}"
+        return (deleted, message)
 
     @classmethod
     def _get_default_subvolume_id(cls) -> str | None:

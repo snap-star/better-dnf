@@ -379,6 +379,10 @@ class TestApplyUpdatesSnapshots:
                     "better_dnf.updater.SnapshotManager.create_post_snapshot",
                     return_value=(True, "43", "Post created"),
                 ) as post,
+                patch(
+                    "better_dnf.updater.SnapshotManager.cleanup_old_snapshots",
+                    return_value=(0, ""),
+                ) as cleanup,
             ):
                 ok, _msg = UpdateApplier.apply_updates(plan, create_snapshot=True)
 
@@ -389,6 +393,8 @@ class TestApplyUpdatesSnapshots:
         # The post snapshot is paired with the pre snapshot (--pre-number)
         assert post.call_args.kwargs["pre_number"] == "42"
         assert "After updating" in post.call_args.kwargs["description"]
+        # Retention runs automatically after the pre snapshot is created
+        cleanup.assert_called_once()
 
     def test_snapshot_failure_continues_without_post(self):
         """Snapshot failure -> continue without snapshot, no post-snapshot."""
