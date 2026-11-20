@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -45,17 +45,32 @@ jobs:
           mypy src/better_dnf/ --ignore-missing-imports
 
   test:
-    runs-on: ubuntu-latest
+    # `ubuntu-latest` is Ubuntu 26.04, and actions/python-versions publishes
+    # prebuilt 3.9 tarballs only up to Ubuntu 24.04. setup-python therefore
+    # fails with "The version '3.9' with architecture 'x64' was not found for
+    # Ubuntu 26.04" instead of falling back to a source build. Keep the 3.9
+    # leg (our requires-python floor) on 24.04 and run everything else on the
+    # newest image, where 3.10+ binaries are available.
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        include:
+          - python-version: '3.9'
+            os: ubuntu-24.04
+          - python-version: '3.10'
+            os: ubuntu-latest
+          - python-version: '3.11'
+            os: ubuntu-latest
+          - python-version: '3.12'
+            os: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -69,9 +84,9 @@ jobs:
           pytest tests/ -v --cov=better_dnf --cov-report=xml
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
         with:
-          file: ./coverage.xml
+          files: ./coverage.xml
           flags: unittests
           name: codecov-${{ matrix.python-version }}
 
@@ -84,7 +99,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.11'
 
@@ -126,7 +141,7 @@ jobs:
           path: dist/
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*
