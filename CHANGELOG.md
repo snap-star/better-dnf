@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-21
+
+### 🐛 Fixed
+
+- **`better-dnf upgrade` never found updates** - It queried the non-existent `better-dnf` package (no RPM provides that capability; the real package is `python3-better-dnf`), so `dnf check-update` returned "no updates" even when a newer release was published. It now uses the owning RPM's name and `--refresh` to defeat stale COPR metadata.
+- **Mixed pip/DNF installs were confusing** - `better-dnf version` now reports whether this copy came from DNF or pip and warns when a second copy is installed the other way (sudo's restricted PATH runs `/usr/bin/better-dnf`). `better-dnf upgrade` refuses to run on a pip install and prints the exact commands to switch to the supported COPR package.
+
 ## [1.2.0] - 2026-11-20
 
 ### ✨ Added

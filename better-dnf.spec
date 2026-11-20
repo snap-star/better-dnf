@@ -1,5 +1,5 @@
 Name:           better-dnf
-Version:        1.2.0
+Version:        1.2.1
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -56,6 +56,10 @@ Summary:        %{summary}
 %{_bindir}/%{name}
 
 %changelog
+* Sat Nov 21 2026 snap-star <rendiyuspramana@gmail.com> - 1.2.1-1
+- Fix 'better-dnf upgrade' to query the real owning RPM (python3-better-dnf) with --refresh
+- Detect mixed pip/DNF installs and warn in 'version'/'upgrade'
+
 * Fri Nov 20 2026 snap-star <rendiyuspramana@gmail.com> - 1.2.0-1
 - Add 'snapshot delete' action to remove a snapshot (pre/post pairs together)
 - Automatically keep only the latest 30 better-dnf snapshots

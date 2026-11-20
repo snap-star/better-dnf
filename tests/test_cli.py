@@ -751,7 +751,11 @@ class TestUpgradeCommand:
     """Tests for the upgrade command."""
 
     def test_already_up_to_date(self, cli_env):
-        with patch("better_dnf.sudo.run_sudo") as mock_run:
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch("better_dnf.cli.rpm_version", return_value="1.1.3-1.fc44"),
+        ):
             mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
             result = runner.invoke(app, ["upgrade"])
 
@@ -762,6 +766,8 @@ class TestUpgradeCommand:
         with (
             patch("better_dnf.sudo.run_sudo") as mock_run,
             patch("questionary.confirm") as confirm,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch("better_dnf.cli.rpm_version", return_value="1.1.3-1.fc44"),
         ):
             # dnf check-update returns 100 when updates are available
             mock_run.return_value = Mock(
@@ -779,6 +785,11 @@ class TestUpgradeCommand:
         with (
             patch("better_dnf.sudo.run_sudo") as mock_run,
             patch("questionary.confirm") as confirm,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch(
+                "better_dnf.cli.rpm_version",
+                side_effect=["1.1.3-1.fc44", "1.2.0-1.fc44"],
+            ),
         ):
             mock_run.side_effect = [
                 Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
@@ -795,6 +806,8 @@ class TestUpgradeCommand:
         with (
             patch("better_dnf.sudo.run_sudo") as mock_run,
             patch("questionary.confirm") as confirm,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch("better_dnf.cli.rpm_version", return_value="1.1.3-1.fc44"),
         ):
             mock_run.return_value = Mock(
                 returncode=100,
@@ -813,6 +826,8 @@ class TestUpgradeCommand:
         with (
             patch("better_dnf.sudo.run_sudo") as mock_run,
             patch("questionary.confirm") as confirm,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch("better_dnf.cli.rpm_version", return_value="1.1.3-1.fc44"),
         ):
             mock_run.side_effect = [
                 Mock(returncode=100, stdout="better-dnf  1.1.3  1.1.2", stderr=""),
@@ -823,3 +838,34 @@ class TestUpgradeCommand:
 
         assert result.exit_code == 0
         assert "Upgrade Failed" in cli_env["text"]()
+
+    def test_pip_install_is_not_upgraded_with_dnf(self, cli_env):
+        with (
+            patch("better_dnf.cli.rpm_package", return_value=None),
+            patch(
+                "better_dnf.cli.dnf_copy",
+                return_value=("python3-better-dnf", "1.1.3-1.fc44"),
+            ),
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+        ):
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 1
+        text = cli_env["text"]()
+        assert "Not a DNF install" in text
+        assert "Also installed from DNF" in text
+        mock_run.assert_not_called()
+
+    def test_unexpected_check_update_error(self, cli_env):
+        with (
+            patch("better_dnf.sudo.run_sudo") as mock_run,
+            patch("better_dnf.cli.rpm_package", return_value="python3-better-dnf"),
+            patch("better_dnf.cli.rpm_version", return_value="1.1.3-1.fc44"),
+        ):
+            mock_run.return_value = Mock(
+                returncode=2, stdout="", stderr="dnf: network error"
+            )
+            result = runner.invoke(app, ["upgrade"])
+
+        assert result.exit_code == 1
+        assert "Update check failed" in cli_env["text"]()

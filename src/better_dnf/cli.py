@@ -15,6 +15,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .analyzer import UpdateAnalyzer
+from .install import dnf_copy, rpm_package, rpm_version
 from .models import UpdateCategory, UpdateImportance
 from .selector import UpdateSelector
 from .snapshot import SnapshotManager
@@ -824,6 +825,26 @@ def version() -> None:
 
     console.print(f"[bold cyan]Better DNF[/bold cyan] v{__version__}")
 
+    # Tell the user which copy they are actually running: a DNF install can
+    # coexist with a pip install, and `sudo better-dnf` picks whichever one
+    # sudo's restricted PATH finds first.
+    current = rpm_package()
+    if current is not None:
+        ver = rpm_version(current)
+        console.print(
+            f"[dim]Installed by DNF: {current}" + (f"-{ver}" if ver else "") + "[/dim]"
+        )
+    else:
+        console.print("[dim]Installed by pip (not managed by DNF).[/dim]")
+        system = dnf_copy()
+        if system is not None:
+            console.print(
+                f"[yellow]⚠️  Also installed from DNF: {system[0]}-{system[1]} "
+                f"(usually /usr/bin/better-dnf).  `sudo better-dnf` runs that "
+                f"copy because sudo uses a restricted PATH, so its version "
+                f"and commands can differ from this one.[/yellow]"
+            )
+
 
 @app.command()
 def upgrade() -> None:
@@ -850,29 +871,79 @@ def upgrade() -> None:
         # Check current version
         console.print(f"[dim]Current version: {__version__}[/dim]")
 
-        # Check for available updates
+        # Only a DNF-installed copy can be upgraded with dnf.  A pip install
+        # must be upgraded with pip; running `dnf upgrade better-dnf` would
+        # either do nothing or upgrade a *different* (system) copy.
+        current_pkg = rpm_package()
+        if current_pkg is None:
+            system = dnf_copy()
+            lines = [
+                (
+                    "[red]✗ This copy of better-dnf was not installed by DNF "
+                    "(pip/venv install), so the COPR upgrade does not apply.[/red]"
+                ),
+                "",
+                "Upgrade it the way it was installed, e.g.:",
+                "  python3 -m pip install --upgrade <path-or-git-url>",
+                "",
+                "Or switch to the supported COPR package:",
+                "  python3 -m pip uninstall -y better-dnf",
+                "  sudo dnf install better-dnf",
+            ]
+            console.print(
+                Panel("\n".join(lines), title="Not a DNF install", border_style="red")
+            )
+            if system is not None:
+                console.print(
+                    f"[yellow]⚠️  Also installed from DNF: {system[0]}-{system[1]} "
+                    f"(usually /usr/bin/better-dnf).  `sudo better-dnf` runs "
+                    f"that copy because sudo uses a restricted PATH -- that "
+                    f"is why the two report different versions/commands.[/yellow]"
+                )
+            raise typer.Exit(1)
+
+        before_version = rpm_version(current_pkg)
+
+        # `better-dnf` is not a real package name (no RPM provides that
+        # capability), so query the actual owning package -- otherwise dnf
+        # matches nothing and reports "already up to date".  --refresh forces
+        # fresh COPR metadata so a just-published release is actually seen.
         with console.status("[bold green]Checking COPR repository...[/bold green]"):
             result = run_sudo(
-                ["dnf", "check-update", "better-dnf"],
-                timeout=30,
+                ["dnf", "check-update", "--refresh", current_pkg],
+                timeout=60,
             )
 
-        # dnf check-update returns exit code 0 when no updates, 100 when updates available
+        # dnf check-update returns 0 when no updates, 100 when updates available
         if result.returncode == 0:
             console.print("[green]✓ better-dnf is already up to date![/green]")
             return
 
-        if result.returncode == 100:
-            # Parse available update info from stdout
-            lines = result.stdout.strip().split("\n")
-            for line in lines:
-                if "better-dnf" in line:
-                    parts = line.split()
-                    if len(parts) >= 2:
-                        console.print(
-                            f"[yellow]📦 Update available: {parts[-1]}[/yellow]"
-                        )
-                    break
+        if result.returncode != 100:
+            console.print(
+                Panel(
+                    f"[red]✗ Could not check for updates:[/red]\n"
+                    f"{result.stderr or result.stdout}",
+                    title="Update check failed",
+                    border_style="red",
+                )
+            )
+            raise typer.Exit(1)
+
+        # Parse available update info from stdout.  check-update prints
+        # "name.arch  version  repo" (or "name  version  repo"); the version
+        # is the penultimate field.
+        available_version: Optional[str] = None  # noqa: FA100
+        lines = result.stdout.strip().split("\n")
+        for line in lines:
+            if "better-dnf" in line:
+                parts = line.split()
+                if len(parts) >= 2:
+                    available_version = parts[-2]
+                    console.print(
+                        f"[yellow]📦 Update available: {available_version}[/yellow]"
+                    )
+                break
 
         # Confirm upgrade
         from questionary import confirm
@@ -884,20 +955,11 @@ def upgrade() -> None:
         # Perform upgrade
         console.print("\n[bold cyan]⬆️  Upgrading better-dnf...[/bold cyan]")
         upgrade_result = run_sudo(
-            ["dnf", "upgrade", "better-dnf", "-y"],
-            timeout=120,
+            ["dnf", "upgrade", "-y", current_pkg],
+            timeout=300,
         )
 
-        if upgrade_result.returncode == 0:
-            console.print(
-                Panel(
-                    "[green]✓ better-dnf upgraded successfully![/green]\n"
-                    "[dim]Restart your shell or run 'hash -r' to use the new version.[/dim]",
-                    title="Upgrade Complete",
-                    border_style="green",
-                )
-            )
-        else:
+        if upgrade_result.returncode != 0:
             console.print(
                 Panel(
                     f"[red]✗ Upgrade failed:[/red]\n{upgrade_result.stderr}",
@@ -905,7 +967,37 @@ def upgrade() -> None:
                     border_style="red",
                 )
             )
+            return
 
+        after_version = rpm_version(current_pkg)
+        if before_version is not None and after_version == before_version:
+            console.print(
+                Panel(
+                    f"[yellow]⚠️  dnf reported success but {current_pkg} is "
+                    f"still {after_version}.  Another copy of better-dnf may "
+                    f"be shadowing it (run `better-dnf version`).[/yellow]",
+                    title="Upgrade Incomplete",
+                    border_style="yellow",
+                )
+            )
+            return
+
+        console.print(
+            Panel(
+                "[green]✓ better-dnf upgraded successfully![/green]\n"
+                + (
+                    f"[dim]{before_version} → {after_version}[/dim]\n"
+                    if before_version and after_version
+                    else ""
+                )
+                + "[dim]Restart your shell or run 'hash -r' to use the new version.[/dim]",
+                title="Upgrade Complete",
+                border_style="green",
+            )
+        )
+
+    except typer.Exit:
+        raise
     except KeyboardInterrupt:
         console.print("\n[yellow]Upgrade cancelled by user.[/yellow]")
         raise typer.Exit()
