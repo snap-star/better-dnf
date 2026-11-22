@@ -309,6 +309,14 @@ Example: better-dnf analyze -s security""",
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         raise typer.Exit()
+    except typer.Exit:
+        raise
+    except EOFError:
+        console.print(
+            "[red]Error: interactive input closed (no terminal?). "
+            "Re-run this command in an interactive terminal.[/red]"
+        )
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)
@@ -445,6 +453,14 @@ Example: better-dnf list-updates -c security -i critical""",
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         raise typer.Exit()
+    except typer.Exit:
+        raise
+    except EOFError:
+        console.print(
+            "[red]Error: interactive input closed (no terminal?). "
+            "Re-run this command in an interactive terminal.[/red]"
+        )
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)
@@ -533,6 +549,14 @@ def security(
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         raise typer.Exit()
+    except typer.Exit:
+        raise
+    except EOFError:
+        console.print(
+            "[red]Error: interactive input closed (no terminal?). "
+            "Re-run this command in an interactive terminal.[/red]"
+        )
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)
@@ -730,6 +754,14 @@ Example: better-dnf snapshot create post --pre-number 307""",
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         raise typer.Exit()
+    except typer.Exit:
+        raise
+    except EOFError:
+        console.print(
+            "[red]Error: interactive input closed (no terminal?). "
+            "Re-run this command in an interactive terminal.[/red]"
+        )
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)
@@ -806,6 +838,14 @@ def history(
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         raise typer.Exit()
+    except typer.Exit:
+        raise
+    except EOFError:
+        console.print(
+            "[red]Error: interactive input closed (no terminal?). "
+            "Re-run this command in an interactive terminal.[/red]"
+        )
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)
@@ -1001,6 +1041,9 @@ def upgrade() -> None:
     except KeyboardInterrupt:
         console.print("\n[yellow]Upgrade cancelled by user.[/yellow]")
         raise typer.Exit()
+    except EOFError:
+        console.print("[red]Error: interactive input closed (no terminal?).[/red]")
+        raise typer.Exit(1)
     except Exception as e:  # noqa: BLE001 - show any failure as a friendly CLI error
         console.print(f"[red]Error: {e!s}[/red]")
         raise typer.Exit(1)

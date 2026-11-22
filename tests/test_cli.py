@@ -383,6 +383,14 @@ class TestAnalyzeExceptions:
         assert result.exit_code == 1
         assert "Error: boom" in cli_env["text"]()
 
+    def test_eoferror_gives_clear_message(self, cli_env):
+        cli_env["analyzer"].analyze_updates.side_effect = EOFError()
+
+        result = runner.invoke(app, ["analyze"])
+
+        assert result.exit_code == 1
+        assert "interactive input closed" in cli_env["text"]()
+
 
 class TestListUpdates:
     """Tests for the list-updates command."""

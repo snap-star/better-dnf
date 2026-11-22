@@ -1,5 +1,5 @@
 Name:           better-dnf
-Version:        1.2.1
+Version:        1.2.2
 Release:        1%{?dist}
 Summary:        A smarter DNF update tool for Fedora
 
@@ -56,6 +56,10 @@ Summary:        %{summary}
 %{_bindir}/%{name}
 
 %changelog
+* Sun Nov 22 2026 snap-star <rendiyuspramana@gmail.com> - 1.2.2-1
+- update README and command reference for version 1.2.1
+- enhance CLI error handling for EOFError
+
 * Sat Nov 21 2026 snap-star <rendiyuspramana@gmail.com> - 1.2.1-1
 - Fix 'better-dnf upgrade' to query the real owning RPM (python3-better-dnf) with --refresh
 - Detect mixed pip/DNF installs and warn in 'version'/'upgrade'
