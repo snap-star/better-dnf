@@ -5,7 +5,11 @@ All notable changes to Better DNF will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.2] - 2026-11-22
+
+- update README and command reference for version 1.2.1
+- enhance CLI error handling for EOFError
+- add compatibility patches for questionary and implement tests for patch functionality
 
 ## [1.2.1] - 2026-11-21
 
@@ -121,21 +125,25 @@ This is the first stable release of Better DNF with complete functionality for s
 ### ✨ Added
 
 #### Navigation System
+
 - ⬅️ **Back navigation** - Return to previous menu in all interactive flows
 - ❌ **Cancel options** - Exit without changes from any menu
 - 🔄 **Menu looping** - Strategy selection loops until user confirms or cancels
 
 #### Package Preview
+
 - 📦 **Preview table** - See exactly what will be installed before confirming
 - 📊 **Importance display** - Color-coded importance levels in preview
 - 🏷️ **Category display** - Shows package category in preview table
 
 #### Improved Help Documentation
+
 - 📖 **Comprehensive help** - Detailed help text for all commands
 - 💡 **Tips and examples** - Usage tips in help output
 - 🎯 **Strategy descriptions** - Clear descriptions for each update strategy
 
 #### Core Features
+
 - 🔍 **Update analysis** - Fetch and analyze available updates
 - 📊 **Smart categorization** - Updates grouped by type (security, kernel, drivers, etc.)
 - 🧠 **Importance analysis** - CVE and changelog-based risk assessment
@@ -145,6 +153,7 @@ This is the first stable release of Better DNF with complete functionality for s
 - 📈 **Progress tracking** - Real-time progress during updates
 
 #### Commands
+
 - `better-dnf analyze` - Main analysis and update command
 - `better-dnf list-updates` - List available updates with filtering
 - `better-dnf security` - Security updates only
@@ -207,6 +216,7 @@ This is the first stable release of Better DNF with complete functionality for s
 ### 🚀 Initial Release
 
 #### Added
+
 - Basic update analysis functionality
 - Package categorization
 - Interactive selection
@@ -219,11 +229,11 @@ This is the first stable release of Better DNF with complete functionality for s
 
 This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html):
 
-| Version | Meaning |
-|---------|---------|
-| **Major (X.0.0)** | Incompatible API changes |
+| Version                 | Meaning                                  |
+| ----------------------- | ---------------------------------------- |
+| **Major (X.0.0)** | Incompatible API changes                 |
 | **Minor (0.X.0)** | New functionality (backwards compatible) |
-| **Patch (0.0.X)** | Backwards compatible bug fixes |
+| **Patch (0.0.X)** | Backwards compatible bug fixes           |
 
 ### Version Bump Rules
 
