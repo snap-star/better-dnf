@@ -6,6 +6,11 @@ from __future__ import annotations
 
 from typing import ClassVar
 
+from .compat import patch_questionary
+
+# Apply third-party compatibility patches before prompt usage
+patch_questionary()
+
 import questionary
 from questionary import checkbox, confirm, select
 from rich import box

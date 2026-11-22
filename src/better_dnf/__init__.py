@@ -12,8 +12,12 @@ __version__ = "1.2.1"
 __author__ = "snap-star"
 
 from better_dnf.analyzer import UpdateAnalyzer
+from better_dnf.compat import patch_questionary
 from better_dnf.models import PackageUpdate, UpdateCategory, UpdateImportance
 from better_dnf.selector import UpdateSelector
+
+# Apply third-party compatibility patches
+patch_questionary()
 
 __all__ = [
     "PackageUpdate",

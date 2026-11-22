@@ -15,11 +15,15 @@ from rich.panel import Panel
 from rich.table import Table
 
 from .analyzer import UpdateAnalyzer
+from .compat import patch_questionary
 from .install import dnf_copy, rpm_package, rpm_version
 from .models import UpdateCategory, UpdateImportance
 from .selector import UpdateSelector
 from .snapshot import SnapshotManager
 from .updater import UpdateApplier
+
+# Apply third-party compatibility patches
+patch_questionary()
 
 # Create CLI app
 app = typer.Typer(
